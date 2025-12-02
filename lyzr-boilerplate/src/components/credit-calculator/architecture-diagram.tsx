@@ -47,15 +47,26 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
   }, []);
 
   React.useEffect(() => {
-    if (data?.mermaidCode && containerRef.current) {
+    if (data?.mermaidCode) {
+      console.log("[Mermaid] Attempting to render diagram:", data.mermaidCode.substring(0, 100) + "...");
       const renderDiagram = async () => {
         try {
           const id = `mermaid-${Date.now()}`;
-          const { svg } = await mermaid.render(id, data.mermaidCode);
+          const cleanCode = data.mermaidCode
+            .replace(/```mermaid\n?/g, '')
+            .replace(/```\n?/g, '')
+            .trim();
+          console.log("[Mermaid] Clean code:", cleanCode.substring(0, 100) + "...");
+          const { svg } = await mermaid.render(id, cleanCode);
+          console.log("[Mermaid] Render successful, SVG length:", svg.length);
           setSvgContent(svg);
         } catch (error) {
-          console.error("Mermaid rendering error:", error);
-          setSvgContent("");
+          console.error("[Mermaid] Rendering error:", error);
+          console.error("[Mermaid] Failed code:", data.mermaidCode);
+          setSvgContent(`<div class="text-red-500 p-4 text-center">
+            <p class="font-medium">Diagram rendering failed</p>
+            <p class="text-xs mt-1">Please try again</p>
+          </div>`);
         }
       };
       renderDiagram();
