@@ -289,7 +289,7 @@ export default function CreditCalculatorPage() {
           className="w-64 shrink-0"
         />
         <div className="flex flex-1 min-w-0">
-          <div className="flex-1 min-w-0 border-r">
+          <div className="w-[40%] min-w-0 border-r">
             <ChatInterface
               messages={activeSession?.messages || []}
               isLoading={isLoading}
@@ -297,7 +297,7 @@ export default function CreditCalculatorPage() {
               streamingContent={streamingContent}
             />
           </div>
-          <div className="w-[400px] shrink-0 p-2">
+          <div className="w-[60%] min-w-0 p-2">
             <ArtifactPanel artifactState={artifactState} />
           </div>
         </div>

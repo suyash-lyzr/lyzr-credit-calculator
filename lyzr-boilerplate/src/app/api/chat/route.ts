@@ -2,8 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 
 const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 const tools: Anthropic.Tool[] = [
@@ -215,7 +214,7 @@ export async function POST(request: NextRequest) {
           currentMessages: Anthropic.MessageParam[]
         ): Promise<void> => {
           const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-5-20250514",
+            model: "claude-3-5-sonnet-20241022",
             max_tokens: 8192,
             system: systemPrompt,
             tools,
