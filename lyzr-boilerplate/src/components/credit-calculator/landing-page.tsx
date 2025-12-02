@@ -23,17 +23,17 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
-      <div className="w-full max-w-2xl px-6">
-        <div className="flex flex-col items-center text-center mb-12">
+      <div className="w-full max-w-2xl px-6 -mt-16">
+        <div className="flex flex-col items-center text-center mb-10">
           <Image
             src="https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png"
             alt="Lyzr"
-            width={120}
-            height={120}
-            className="mb-6"
+            width={100}
+            height={100}
+            className="mb-4"
             unoptimized
           />
-          <h1 className="text-3xl font-bold mb-3">Credit Calculator</h1>
+          <h1 className="text-3xl font-bold mb-2">Credit Calculator</h1>
           <p className="text-muted-foreground text-lg">
             Describe your use case and I&apos;ll calculate the credits and ROI
           </p>
@@ -61,7 +61,7 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
           </Button>
         </form>
 
-        <div className="mt-8 flex flex-wrap justify-center gap-2">
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
           <ExampleChip 
             text="Customer support ticket triage" 
             onClick={() => setInput("I want to automate customer support ticket triage for about 500 tickets per day")} 
@@ -75,6 +75,10 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
             onClick={() => setInput("I need to analyze legal contracts and extract key terms - about 50 contracts per week")} 
           />
         </div>
+
+        <p className="mt-8 text-center text-sm text-muted-foreground/70 italic">
+          Lyzr follows a transparent pricing model where customers pay only for Agent Actions, not the underlying LLM or compute cost.
+        </p>
       </div>
     </div>
   );

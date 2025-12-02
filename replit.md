@@ -124,6 +124,14 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Landing Page & Questionnaire UI Polish
+  - Shifted hero section upwards (-mt-16) for better visual balance
+  - Added subtle italic pricing tagline below examples
+  - Questionnaire: subtle gray borders on option containers (border-border)
+  - Purple borders only on checkbox/radio controls themselves
+  - Fixed click-to-select using proper `<label>` HTML semantics
+  - More subtle selected state (bg-primary/5 instead of bg-primary/10)
+
 - **2025-12-02:** UI & Prompt Improvements
   - Increased Mermaid canvas height (280px/40vh) for better diagram visibility
   - Removed redundant header from architecture panel (no more "Orchestrator | 3 Agents • KB • 2 Tools MEDIUM")

@@ -89,27 +89,24 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
                 {question.options.map((option) => {
                   const isSelected = responses[question.id] === option;
                   return (
-                    <div
+                    <label
                       key={option}
-                      onClick={() => handleRadioChange(question.id, option)}
-                      className={`flex items-center gap-2 rounded-lg border-2 p-2.5 cursor-pointer transition-all ${
+                      htmlFor={`${question.id}-${option}`}
+                      className={`flex items-center gap-2 rounded-lg border p-2.5 cursor-pointer transition-all ${
                         isSelected 
-                          ? "bg-primary/10 border-primary" 
-                          : "bg-background border-primary/30 hover:border-primary/50 hover:bg-accent"
+                          ? "bg-primary/5 border-muted-foreground/30" 
+                          : "bg-background border-border hover:bg-muted/50"
                       }`}
                     >
                       <RadioGroupItem 
                         value={option} 
                         id={`${question.id}-${option}`}
-                        className="border-primary/50 data-[state=checked]:border-primary"
+                        className="border-primary data-[state=checked]:border-primary data-[state=checked]:text-primary"
                       />
-                      <Label
-                        htmlFor={`${question.id}-${option}`}
-                        className="text-sm cursor-pointer flex-1 leading-tight"
-                      >
+                      <span className="text-sm flex-1 leading-tight">
                         {option}
-                      </Label>
-                    </div>
+                      </span>
+                    </label>
                   );
                 })}
               </RadioGroup>
@@ -118,31 +115,27 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
                 {question.options.map((option) => {
                   const isChecked = ((responses[question.id] as string[]) || []).includes(option);
                   return (
-                    <div
+                    <label
                       key={option}
-                      onClick={() => handleCheckboxChange(question.id, option, !isChecked)}
-                      className={`flex items-center gap-2 rounded-lg border-2 p-2.5 cursor-pointer transition-all ${
+                      htmlFor={`${question.id}-${option}`}
+                      className={`flex items-center gap-2 rounded-lg border p-2.5 cursor-pointer transition-all ${
                         isChecked 
-                          ? "bg-primary/10 border-primary" 
-                          : "bg-background border-primary/30 hover:border-primary/50 hover:bg-accent"
+                          ? "bg-primary/5 border-muted-foreground/30" 
+                          : "bg-background border-border hover:bg-muted/50"
                       }`}
                     >
                       <Checkbox
                         id={`${question.id}-${option}`}
                         checked={isChecked}
-                        className="border-primary/50 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
+                        className="border-primary data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                         onCheckedChange={(checked) =>
                           handleCheckboxChange(question.id, option, checked as boolean)
                         }
-                        onClick={(e) => e.stopPropagation()}
                       />
-                      <Label
-                        htmlFor={`${question.id}-${option}`}
-                        className="text-sm cursor-pointer flex-1 leading-tight"
-                      >
+                      <span className="text-sm flex-1 leading-tight">
                         {option}
-                      </Label>
-                    </div>
+                      </span>
+                    </label>
                   );
                 })}
               </div>
