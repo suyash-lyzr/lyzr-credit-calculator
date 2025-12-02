@@ -81,12 +81,13 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
             </div>
             <div className="flex-1 relative border rounded-lg bg-white overflow-hidden" ref={containerRef}>
               <TransformWrapper
-                initialScale={0.8}
-                minScale={0.3}
+                initialScale={1}
+                minScale={0.5}
                 maxScale={3}
                 centerOnInit={true}
                 wheel={{ step: 0.1 }}
-                panning={{ velocityDisabled: true }}
+                panning={{ disabled: false }}
+                limitToBounds={false}
               >
                 {({ zoomIn, zoomOut, resetTransform }) => (
                   <>

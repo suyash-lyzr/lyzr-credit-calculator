@@ -128,7 +128,7 @@ export function ChatInterface({
     <div className="flex h-full flex-col overflow-hidden">
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto p-4"
+        className="flex-1 overflow-y-auto p-4 pt-8"
       >
         <div className="space-y-4">
           {messages.length === 0 && !streamingContent && (
