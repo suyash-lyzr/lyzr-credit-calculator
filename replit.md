@@ -124,7 +124,14 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
-- **2025-12-02:** Improvements to Chat & ROI Calculation
+- **2025-12-02:** Critical Bug Fixes & UI Improvements
+  - Set temperature to 0.3 for deterministic AI behavior
+  - Fixed questionnaire re-appearing after user submits selections (added hasArtifacts guard + prompt instructions)
+  - Questionnaire UI: reduced spacing, added purple borders to checkboxes/radios (border-primary/30)
+  - Made entire option row clickable for checkboxes and radio buttons
+  - Added strict instruction: "When user message starts with 'My selections:' - STOP questions, START tools"
+
+- **2025-12-02:** Earlier - Chat & ROI Calculation
   - Added no-emoji instruction to all responses (chat AND diagrams)
   - Fixed text overflow in chat message bubbles (proper word wrapping)
   - Enhanced ROI calculation with realistic US labor rates table
