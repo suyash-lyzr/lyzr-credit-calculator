@@ -66,7 +66,7 @@ B_API: = N_Agents + N_Tools_Called_Per_Run`,
         },
         mermaidCode: {
           type: "string",
-          description: "Mermaid.js flowchart code using graph TD format",
+          description: "Mermaid.js flowchart code using graph TD format. IMPORTANT: Do NOT use any emojis in node labels or anywhere in the diagram. Use clean, professional text only.",
         },
       },
       required: [

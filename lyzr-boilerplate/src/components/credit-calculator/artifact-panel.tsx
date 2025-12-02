@@ -99,9 +99,9 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
           {(artifactState.isLoading.architecture || artifactState.architecture) && (
-            <section>
+            <section className="pb-3 border-b">
               <SectionHeader
                 icon={<IconBrain className="h-4 w-4 text-primary" />}
                 title="Agent Architecture"
@@ -109,19 +109,21 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
                 isLoading={artifactState.isLoading.architecture}
                 isComplete={!!artifactState.architecture}
               />
-              {artifactState.isLoading.architecture && !artifactState.architecture ? (
-                <LoadingPlaceholder message="Analyzing requirements and designing architecture..." />
-              ) : (
-                <ArchitectureDiagram
-                  data={artifactState.architecture}
-                  isLoading={false}
-                />
-              )}
+              <div className="h-[200px] max-h-[33vh]">
+                {artifactState.isLoading.architecture && !artifactState.architecture ? (
+                  <LoadingPlaceholder message="Analyzing requirements and designing architecture..." />
+                ) : (
+                  <ArchitectureDiagram
+                    data={artifactState.architecture}
+                    isLoading={false}
+                  />
+                )}
+              </div>
             </section>
           )}
 
           {(artifactState.isLoading.credits || artifactState.credits) && (
-            <section>
+            <section className="pb-3 border-b">
               <SectionHeader
                 icon={<IconCalculator className="h-4 w-4 text-primary" />}
                 title="Credit Calculation"

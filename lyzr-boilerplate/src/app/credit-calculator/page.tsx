@@ -288,10 +288,24 @@ export default function CreditCalculatorPage() {
 
   if (!hasStartedConversation) {
     return (
-      <LandingPage
-        onSubmit={sendMessage}
-        isLoading={isLoading}
-      />
+      <SidebarProvider defaultOpen={true}>
+        <div className="flex h-screen w-full overflow-hidden">
+          <ChatSidebar
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onNewSession={createNewSession}
+            onSelectSession={selectSession}
+            onDeleteSession={deleteSession}
+            className="w-64 shrink-0"
+          />
+          <div className="flex-1 flex items-center justify-center">
+            <LandingPage
+              onSubmit={sendMessage}
+              isLoading={isLoading}
+            />
+          </div>
+        </div>
+      </SidebarProvider>
     );
   }
 

@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { IconSchema, IconLoader2, IconZoomIn, IconZoomOut, IconFocus2 } from "@tabler/icons-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { IconLoader2, IconZoomIn, IconZoomOut, IconFocus2 } from "@tabler/icons-react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArchitectureData } from "@/lib/types";
@@ -77,37 +77,31 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
 
   return (
     <Card className="flex flex-col h-full overflow-hidden border-0 shadow-none bg-transparent">
-      <CardHeader className="py-2 px-3 shrink-0">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <IconSchema className="h-4 w-4 text-primary" />
-            Agent Architecture
-          </CardTitle>
-          {data && (
-            <Badge variant="outline" className={`text-[10px] ${complexityColors[data.complexity_profile]}`}>
-              {data.complexity_profile} Complexity
+      {data && (
+        <CardHeader className="py-1 px-1 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2 text-sm text-muted-foreground">
+              <span>{data.architecture_pattern}</span>
+              <span>|</span>
+              <span>{data.architecture_counts.n_agents} Agents</span>
+              {data.architecture_counts.n_kb > 0 && <span>• KB</span>}
+              {data.architecture_counts.n_tools > 0 && <span>• {data.architecture_counts.n_tools} Tools</span>}
+            </div>
+            <Badge variant="outline" className={`text-xs ${complexityColors[data.complexity_profile]}`}>
+              {data.complexity_profile}
             </Badge>
-          )}
-        </div>
-        {data && (
-          <div className="mt-1 flex gap-2 text-[10px] text-muted-foreground">
-            <span>Pattern: {data.architecture_pattern}</span>
-            <span>|</span>
-            <span>Agents: {data.architecture_counts.n_agents}</span>
-            <span>KB: {data.architecture_counts.n_kb}</span>
-            <span>Tools: {data.architecture_counts.n_tools}</span>
           </div>
-        )}
-      </CardHeader>
-      <CardContent className="p-2 flex-1 overflow-hidden">
+        </CardHeader>
+      )}
+      <CardContent className="p-1 flex-1 overflow-hidden">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
             <IconLoader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : data && svgContent ? (
           <div className="flex flex-col h-full">
-            <div className="text-[11px] text-muted-foreground mb-2 px-1">
-              <strong>{data.title}:</strong> {data.summary}
+            <div className="text-sm text-muted-foreground mb-2 px-1">
+              <strong className="text-foreground">{data.title}:</strong> {data.summary}
             </div>
             <div className="flex-1 relative border rounded-lg bg-white overflow-hidden" ref={containerRef}>
               <TransformWrapper
