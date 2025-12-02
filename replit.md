@@ -5,7 +5,6 @@ This is an interactive Lyzr Credit Calculator built with Next.js 15, TypeScript,
 
 **Current State:** Fully configured and running on Replit
 **Last Updated:** December 2, 2025
-
 ## Application Features
 
 ### Credit Calculator
@@ -107,13 +106,20 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Streaming & UI Updates
+  - Upgraded to Claude Sonnet 4.5 (claude-sonnet-4-5-20250514)
+  - Implemented true SSE streaming for real-time text output
+  - Fixed chat scrolling with proper height constraints
+  - Updated sidebar header with Lyzr logo (no circle) + "Credit Calculator" text
+  - Added Lyzr icon for AI responses in chat
+  - Improved markdown list formatting with proper bullet point styles
+
 - **2025-12-02:** UI Improvements
   - Added clean landing page with Lyzr logo and single input
   - Page transitions to 40-60 split after first message
   - Replaced all gradient "L" icons with actual Lyzr logo
   - Changed "automation" to "use case" throughout
   - Added example chips for quick starts
-  - Updated model to claude-sonnet-4-20250514
 
 - **2025-12-02:** Major Update - Sophisticated 3-Part Agent Architecture
   - Implemented Complexity Assessment Matrix (LOW/MEDIUM/HIGH)
