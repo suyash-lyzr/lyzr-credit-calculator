@@ -124,6 +124,13 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** UI Polish & Layout Updates
+  - Landing page now shows sidebar with "Credit Calculator" header and chat history
+  - Mermaid canvas fixed to 1/3 of artifact area (200px, max 33vh)
+  - Added border separators between artifact sections (Architecture | Credits | ROI)
+  - Font sizes made consistent across all sections (text-sm)
+  - Added no-emoji instruction to Mermaid diagram generation
+
 - **2025-12-02:** Questionnaire UX & Architecture Summary
   - Hide raw JSON streaming when questionnaire is generating - shows "Preparing follow-up questions..." thinking state instead
   - Added agent_architecture_summary to credit calculation - shows agent flow (e.g., "3-Agent Chain: Ingestion → Extraction → Validation with KB")
