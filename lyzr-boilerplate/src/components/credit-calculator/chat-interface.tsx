@@ -4,12 +4,13 @@ import * as React from "react";
 import { IconSend, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Image from "next/image";
+import { Questionnaire, parseQuestionnaire } from "./questionnaire";
 
 const LYZR_ICON = "https://cdn2.futurepedia.io/2024-09-18T20-25-23.994Z-lyyk.png?w=256";
 const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
@@ -19,6 +20,10 @@ interface ChatInterfaceProps {
   isLoading: boolean;
   onSendMessage: (message: string) => void;
   streamingContent?: string;
+}
+
+function removeQuestionnaireJson(content: string): string {
+  return content.replace(/```json\s*\{[\s\S]*?"type":\s*"questionnaire"[\s\S]*?\}\s*```/g, '').trim();
 }
 
 export function ChatInterface({
@@ -44,6 +49,52 @@ export function ChatInterface({
       setInput("");
     }
   };
+
+  const handleQuestionnaireSubmit = (responses: Record<string, string | string[]>) => {
+    const formattedParts: string[] = [];
+    Object.entries(responses).forEach(([, value]) => {
+      if (Array.isArray(value)) {
+        formattedParts.push(value.join(", "));
+      } else {
+        formattedParts.push(value);
+      }
+    });
+    const message = `My selections: ${formattedParts.join(" | ")}`;
+    onSendMessage(message);
+  };
+
+  const renderMessageContent = (message: ChatMessage, isLastAssistantMessage: boolean) => {
+    if (message.role === "user") {
+      return <p className="text-sm">{message.content}</p>;
+    }
+
+    const questionnaire = parseQuestionnaire(message.content);
+    const textContent = removeQuestionnaireJson(message.content);
+
+    return (
+      <div className="space-y-3">
+        {textContent && (
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {textContent}
+            </ReactMarkdown>
+          </div>
+        )}
+        {questionnaire && isLastAssistantMessage && !isLoading && (
+          <div className="mt-3">
+            <Questionnaire
+              data={questionnaire}
+              onSubmit={handleQuestionnaireSubmit}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const lastAssistantMessageIndex = messages.reduce((lastIndex, msg, idx) => 
+    msg.role === "assistant" ? idx : lastIndex, -1);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -71,7 +122,7 @@ export function ChatInterface({
             </div>
           )}
           
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <div
               key={message.id}
               className={cn(
@@ -93,21 +144,13 @@ export function ChatInterface({
               )}
               <div
                 className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-2",
+                  "max-w-[85%] rounded-2xl px-4 py-2",
                   message.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted"
                 )}
               >
-                {message.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {message.content}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <p className="text-sm">{message.content}</p>
-                )}
+                {renderMessageContent(message, index === lastAssistantMessageIndex)}
               </div>
               {message.role === "user" && (
                 <Avatar className="h-8 w-8 shrink-0">
@@ -131,10 +174,10 @@ export function ChatInterface({
                   unoptimized
                 />
               </div>
-              <div className="max-w-[80%] rounded-2xl px-4 py-2 bg-muted">
+              <div className="max-w-[85%] rounded-2xl px-4 py-2 bg-muted">
                 <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {streamingContent}
+                    {removeQuestionnaireJson(streamingContent)}
                   </ReactMarkdown>
                 </div>
               </div>
