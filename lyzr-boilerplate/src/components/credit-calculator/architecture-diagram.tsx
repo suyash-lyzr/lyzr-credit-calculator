@@ -1,10 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { IconSchema, IconLoader2 } from "@tabler/icons-react";
+import { IconSchema, IconLoader2, IconZoomIn, IconZoomOut, IconFocus2 } from "@tabler/icons-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ArchitectureData } from "@/lib/types";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import mermaid from "mermaid";
 
 interface ArchitectureDiagramProps {
@@ -33,13 +35,13 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
         lineColor: "#A94FA1",
         secondaryColor: "#f0f0f0",
         tertiaryColor: "#fff",
-        fontSize: "11px",
+        fontSize: "12px",
       },
       flowchart: {
         curve: "basis",
-        padding: 8,
-        nodeSpacing: 30,
-        rankSpacing: 30,
+        padding: 15,
+        nodeSpacing: 40,
+        rankSpacing: 40,
       },
     });
   }, []);
@@ -61,8 +63,8 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
   }, [data?.mermaidCode]);
 
   return (
-    <Card className="flex-1 overflow-hidden border-0 shadow-none bg-transparent">
-      <CardHeader className="py-2 px-3">
+    <Card className="flex flex-col h-full overflow-hidden border-0 shadow-none bg-transparent">
+      <CardHeader className="py-2 px-3 shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm font-medium">
             <IconSchema className="h-4 w-4 text-primary" />
@@ -84,21 +86,81 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
           </div>
         )}
       </CardHeader>
-      <CardContent className="p-2 h-[calc(100%-60px)]">
+      <CardContent className="p-2 flex-1 overflow-hidden">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
             <IconLoader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
-        ) : data ? (
+        ) : data && svgContent ? (
           <div className="flex flex-col h-full">
-            <div className="text-[10px] text-muted-foreground mb-1 px-1">
-              {data.title}: {data.summary}
+            <div className="text-[11px] text-muted-foreground mb-2 px-1">
+              <strong>{data.title}:</strong> {data.summary}
             </div>
-            <div
-              ref={containerRef}
-              className="flex flex-1 items-center justify-center overflow-hidden [&_svg]:max-w-full [&_svg]:max-h-full [&_svg]:w-auto [&_svg]:h-auto"
-              dangerouslySetInnerHTML={{ __html: svgContent }}
-            />
+            <div className="flex-1 relative border rounded-lg bg-white overflow-hidden" ref={containerRef}>
+              <TransformWrapper
+                initialScale={0.8}
+                minScale={0.3}
+                maxScale={3}
+                centerOnInit={true}
+                wheel={{ step: 0.1 }}
+                panning={{ velocityDisabled: true }}
+              >
+                {({ zoomIn, zoomOut, resetTransform }) => (
+                  <>
+                    <div className="absolute top-2 right-2 z-10 flex gap-1">
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
+                        onClick={() => zoomIn()}
+                        title="Zoom In"
+                      >
+                        <IconZoomIn className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
+                        onClick={() => zoomOut()}
+                        title="Zoom Out"
+                      >
+                        <IconZoomOut className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
+                        onClick={() => resetTransform()}
+                        title="Reset View"
+                      >
+                        <IconFocus2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <TransformComponent
+                      wrapperStyle={{
+                        width: "100%",
+                        height: "100%",
+                      }}
+                      contentStyle={{
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <div
+                        className="[&_svg]:max-w-none [&_svg]:max-h-none cursor-grab active:cursor-grabbing p-4"
+                        dangerouslySetInnerHTML={{ __html: svgContent }}
+                      />
+                    </TransformComponent>
+                    <div className="absolute bottom-2 left-2 text-[10px] text-muted-foreground bg-white/80 px-2 py-1 rounded">
+                      Drag to pan • Scroll to zoom
+                    </div>
+                  </>
+                )}
+              </TransformWrapper>
+            </div>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center text-center">

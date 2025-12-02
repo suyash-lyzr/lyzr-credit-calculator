@@ -108,9 +108,16 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Claude Opus 4.5 & Interactive Canvas
+  - Upgraded to Claude Opus 4.5 (claude-opus-4-5) - most intelligent model
+  - Enforced sequential tool calling (one tool at a time, wait for result)
+  - Added tabbed interface for artifacts (Architecture / Credits / ROI)
+  - Interactive Mermaid diagram with zoom, pan, and drag (react-zoom-pan-pinch)
+  - Fixed web search error handling with proper JSON parsing
+  - Tabs auto-switch as each result comes in
+
 - **2025-12-02:** Streaming & UI Updates
-  - Upgraded to Claude Sonnet 4.5 (claude-sonnet-4-5-20250514)
-  - Implemented true SSE streaming for real-time text output
+  - Implemented SSE streaming for real-time text output
   - Fixed chat scrolling with proper height constraints
   - Updated sidebar header with Lyzr logo (no circle) + "Credit Calculator" text
   - Added Lyzr icon for AI responses in chat
