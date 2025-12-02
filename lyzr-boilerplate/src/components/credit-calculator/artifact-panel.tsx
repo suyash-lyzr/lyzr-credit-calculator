@@ -21,23 +21,23 @@ interface SectionHeaderProps {
 
 function SectionHeader({ icon, title, stepNumber, isLoading, isComplete }: SectionHeaderProps) {
   return (
-    <div className="flex items-center gap-3 mb-3">
-      <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
+    <div className="flex items-center gap-2 mb-2">
+      <div className={`flex items-center justify-center w-6 h-6 rounded-full ${
         isComplete ? 'bg-green-100 text-green-600' : 
         isLoading ? 'bg-primary/10 text-primary' : 
         'bg-muted text-muted-foreground'
       }`}>
         {isLoading ? (
-          <IconLoader2 className="h-4 w-4 animate-spin" />
+          <IconLoader2 className="h-3 w-3 animate-spin" />
         ) : isComplete ? (
-          <IconCheck className="h-4 w-4" />
+          <IconCheck className="h-3 w-3" />
         ) : (
-          <span className="text-sm font-medium">{stepNumber}</span>
+          <span className="text-xs font-medium">{stepNumber}</span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {icon}
-        <h3 className="font-semibold text-lg">{title}</h3>
+        <h3 className="font-semibold text-base">{title}</h3>
       </div>
     </div>
   );
@@ -45,10 +45,10 @@ function SectionHeader({ icon, title, stepNumber, isLoading, isComplete }: Secti
 
 function LoadingPlaceholder({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-center py-12 bg-muted/30 rounded-lg border border-dashed">
+    <div className="flex items-center justify-center py-8 bg-muted/30 rounded-lg border border-dashed">
       <div className="text-center">
-        <IconLoader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
-        <p className="text-sm text-muted-foreground">{message}</p>
+        <IconLoader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+        <p className="text-xs text-muted-foreground">{message}</p>
       </div>
     </div>
   );
@@ -99,11 +99,11 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-6">
           {(artifactState.isLoading.architecture || artifactState.architecture) && (
             <section>
               <SectionHeader
-                icon={<IconBrain className="h-5 w-5 text-primary" />}
+                icon={<IconBrain className="h-4 w-4 text-primary" />}
                 title="Agent Architecture"
                 stepNumber={1}
                 isLoading={artifactState.isLoading.architecture}
@@ -123,7 +123,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           {(artifactState.isLoading.credits || artifactState.credits) && (
             <section>
               <SectionHeader
-                icon={<IconCalculator className="h-5 w-5 text-primary" />}
+                icon={<IconCalculator className="h-4 w-4 text-primary" />}
                 title="Credit Calculation"
                 stepNumber={2}
                 isLoading={artifactState.isLoading.credits}
@@ -143,7 +143,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           {(artifactState.isLoading.roi || artifactState.roi) && (
             <section>
               <SectionHeader
-                icon={<IconChartBar className="h-5 w-5 text-primary" />}
+                icon={<IconChartBar className="h-4 w-4 text-primary" />}
                 title="ROI Analysis"
                 stepNumber={3}
                 isLoading={artifactState.isLoading.roi}

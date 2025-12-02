@@ -315,7 +315,7 @@ export default function CreditCalculatorPage() {
               streamingContent={streamingContent}
             />
           </div>
-          <div className="w-[60%] min-w-0 p-2">
+          <div className="w-[60%] min-w-0 p-1.5">
             <ArtifactPanel artifactState={artifactState} />
           </div>
         </div>

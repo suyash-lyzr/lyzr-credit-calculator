@@ -1,10 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { IconTrendingUp, IconLoader2, IconArrowUp, IconClock, IconUser, IconRobot } from "@tabler/icons-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import { IconLoader2 } from "@tabler/icons-react";
 import { ROICalculation as ROICalculationType } from "@/lib/types";
 
 interface ROICalculationProps {
@@ -14,6 +11,12 @@ interface ROICalculationProps {
 
 export function ROICalculation({ data, isLoading }: ROICalculationProps) {
   const formatCurrency = (value: number, decimals: number = 0) => {
+    if (value >= 1000000) {
+      return `$${(value / 1000000).toFixed(1)}M`;
+    }
+    if (value >= 1000) {
+      return `$${(value / 1000).toFixed(0)}k`;
+    }
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -26,137 +29,86 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
     return new Intl.NumberFormat("en-US").format(value);
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <IconLoader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          ROI calculation will appear here
+        </p>
+      </div>
+    );
+  }
+
+  const yearlyVolume = data.volume_estimates.units_per_month * 12;
+  const humanYearlyCost = data.human_analysis.cost_per_unit * yearlyVolume;
+  const aiYearlyCost = data.ai_analysis.cost_per_unit * yearlyVolume;
+  const netSavings = humanYearlyCost - aiYearlyCost;
+  const savingsPercentage = ((netSavings / humanYearlyCost) * 100).toFixed(1);
+
   return (
-    <Card className="flex-1 overflow-hidden border-0 shadow-none bg-transparent">
-      <CardHeader className="py-2 px-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium">
-            <IconTrendingUp className="h-4 w-4 text-primary" />
-            ROI vs. Manual Process
-          </CardTitle>
-          {data && (
-            <Badge variant="outline" className="text-[10px] bg-green-100 text-green-700 border-green-300">
-              {data.roi_percentage.toFixed(0)}% ROI
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-2 h-[calc(100%-48px)] overflow-auto">
-        {isLoading ? (
-          <div className="flex h-full items-center justify-center">
-            <IconLoader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        ) : data ? (
-          <div className="space-y-3">
-            <div className="rounded-lg bg-muted/50 p-2">
-              <div className="text-[10px] font-medium text-muted-foreground mb-1">Manual Process Analysis</div>
-              <div className="space-y-1 text-[10px]">
-                <div className="flex items-center gap-1">
-                  <IconUser className="h-3 w-3" />
-                  <span className="font-medium">{data.human_analysis.mapped_role}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Base Hourly Rate</span>
-                  <span>{formatCurrency(data.human_analysis.base_hourly_wage, 2)}/hr</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fully Loaded (w/ 30% overhead)</span>
-                  <span className="font-medium">{formatCurrency(data.human_analysis.fully_loaded_rate, 2)}/hr</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Time per {data.unit_name}</span>
-                  <span>{data.human_analysis.time_per_task_minutes} mins</span>
-                </div>
-                <div className="flex justify-between font-medium pt-1 border-t border-border/50">
-                  <span>Cost per {data.unit_name}</span>
-                  <span className="text-orange-600">{formatCurrency(data.human_analysis.cost_per_unit, 2)}</span>
-                </div>
-              </div>
-              <div className="text-[9px] text-muted-foreground mt-1">
-                Source: {data.human_analysis.wage_source}
-              </div>
-            </div>
+    <div className="space-y-4">
+      <p className="text-sm text-foreground/80">
+        <span className="font-semibold">ROI Analysis: AI vs. Human Execution</span>{" "}
+        Comparison based on a standard {data.human_analysis.mapped_role} rate of{" "}
+        <span className="font-medium">${data.human_analysis.fully_loaded_rate.toFixed(0)}/hr</span> taking{" "}
+        <span className="font-medium">{data.human_analysis.time_per_task_minutes} minutes</span> per {data.unit_name}.
+      </p>
 
-            <div className="rounded-lg bg-muted/50 p-2">
-              <div className="text-[10px] font-medium text-muted-foreground mb-1">AI Automation</div>
-              <div className="space-y-1 text-[10px]">
-                <div className="flex items-center gap-1">
-                  <IconRobot className="h-3 w-3" />
-                  <span className="font-medium">Lyzr AI Agent</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Processing Time</span>
-                  <span>{data.ai_analysis.time_per_task_seconds} seconds</span>
-                </div>
-                <div className="flex justify-between font-medium pt-1 border-t border-border/50">
-                  <span>Cost per {data.unit_name}</span>
-                  <span className="text-primary">{formatCurrency(data.ai_analysis.cost_per_unit, 3)}</span>
-                </div>
-              </div>
-            </div>
+      <div className="overflow-hidden rounded-lg border">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-muted/50">
+              <th className="py-2.5 px-4 text-left font-semibold">Metric</th>
+              <th className="py-2.5 px-4 text-left font-semibold">Human Manual Process</th>
+              <th className="py-2.5 px-4 text-left font-semibold">Lyzr Agent Architecture</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            <tr>
+              <td className="py-2.5 px-4 font-medium">Time Per {data.unit_name}</td>
+              <td className="py-2.5 px-4">{data.human_analysis.time_per_task_minutes} Minutes</td>
+              <td className="py-2.5 px-4">
+                {"< "}{Math.ceil(data.ai_analysis.time_per_task_seconds / 60)} Minute{data.ai_analysis.time_per_task_seconds > 60 ? "s" : ""}{" "}
+                <span className="text-muted-foreground">(Parallel)</span>
+              </td>
+            </tr>
+            <tr>
+              <td className="py-2.5 px-4 font-medium">Unit Cost</td>
+              <td className="py-2.5 px-4">${data.human_analysis.cost_per_unit.toFixed(2)} / {data.unit_name}</td>
+              <td className="py-2.5 px-4">
+                <span className="font-medium">${data.ai_analysis.cost_per_unit.toFixed(2)} / {data.unit_name}</span>{" "}
+                <span className="text-muted-foreground">(Lyzr + Infra)</span>
+              </td>
+            </tr>
+            <tr>
+              <td className="py-2.5 px-4 font-medium">Total Year 1 Cost</td>
+              <td className="py-2.5 px-4">{formatCurrency(humanYearlyCost)}</td>
+              <td className="py-2.5 px-4">{formatCurrency(aiYearlyCost)}</td>
+            </tr>
+            <tr className="bg-muted/30">
+              <td className="py-2.5 px-4 font-semibold">Net Savings</td>
+              <td className="py-2.5 px-4">–</td>
+              <td className="py-2.5 px-4 font-semibold text-green-600">
+                {formatCurrency(netSavings)} ({savingsPercentage}%)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-            <div className="rounded-lg bg-green-50 p-2 border border-green-200">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-medium">Cost Savings</span>
-                <span className="flex items-center gap-1 text-xs text-green-600 font-bold">
-                  <IconArrowUp className="h-3 w-3" />
-                  {data.comparison.savings_percentage.toFixed(0)}%
-                </span>
-              </div>
-              <Progress value={Math.min(data.comparison.savings_percentage, 100)} className="h-2" />
-              <div className="flex justify-between text-[10px] mt-1">
-                <span className="text-muted-foreground">Time Savings</span>
-                <span className="text-green-600 font-medium">{data.comparison.time_savings_percentage.toFixed(0)}%</span>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-muted/50 p-2">
-              <div className="text-[10px] font-medium text-muted-foreground mb-1">
-                Volume: {formatNumber(data.volume_estimates.units_per_month)} {data.unit_name}s/month
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-green-500/10 p-2 text-center">
-                <p className="text-[10px] text-muted-foreground">Monthly Savings</p>
-                <p className="text-sm font-bold text-green-600">
-                  {formatCurrency(data.comparison.monthly_savings)}
-                </p>
-              </div>
-              <div className="rounded-lg bg-green-500/10 p-2 text-center">
-                <p className="text-[10px] text-muted-foreground">Yearly Savings</p>
-                <p className="text-sm font-bold text-green-600">
-                  {formatCurrency(data.comparison.yearly_savings)}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-primary/10 p-2 text-center">
-                <p className="text-[10px] text-muted-foreground">Payback Period</p>
-                <p className="text-sm font-bold text-primary">
-                  {data.comparison.payback_period_days < 30 
-                    ? `${data.comparison.payback_period_days.toFixed(0)} days`
-                    : `${(data.comparison.payback_period_days / 30).toFixed(1)} months`
-                  }
-                </p>
-              </div>
-              <div className="rounded-lg bg-primary/10 p-2 text-center">
-                <p className="text-[10px] text-muted-foreground">Annual ROI</p>
-                <p className="text-sm font-bold text-primary">
-                  {data.roi_percentage.toFixed(0)}%
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex h-full items-center justify-center text-center">
-            <p className="text-xs text-muted-foreground">
-              ROI calculation will appear here
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      <p className="text-sm">
+        <span className="font-semibold">The Bottom Line:</span> For a total investment of ~{formatCurrency(aiYearlyCost)} (Software + Compute), 
+        you replace {formatCurrency(humanYearlyCost)} in manual labor, ensuring instant scalability and a persistent 
+        Knowledge Graph of your {data.use_case.toLowerCase()} data.
+      </p>
+    </div>
   );
 }
