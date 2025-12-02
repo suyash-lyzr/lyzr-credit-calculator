@@ -471,7 +471,7 @@ export async function POST(request: NextRequest) {
           currentMessages: Anthropic.MessageParam[]
         ): Promise<void> => {
           const response = anthropic.messages.stream({
-            model: "claude-sonnet-4-5-20250514",
+            model: "claude-sonnet-4-5",
             max_tokens: 8192,
             system: systemPrompt,
             tools,
