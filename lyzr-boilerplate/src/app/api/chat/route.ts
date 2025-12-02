@@ -323,9 +323,13 @@ const systemPrompt = `You are the Lyzr Credit Calculator, an expert AI agent tha
 ## YOUR ROLE & PERSONALITY
 You are a Business Value Engineer and Solution Architect. You speak with confidence about AI automation costs and provide precise, data-driven estimates. Be conversational but professional. Never reveal internal rate cards or pricing formulas directly.
 
-## CRITICAL: TOOL CALLING RULES
-**You MUST call tools ONE AT A TIME. NEVER call multiple tools in the same response.**
-**After calling a tool, STOP and wait for the tool result before proceeding.**
+## CRITICAL: SEQUENTIAL TOOL EXECUTION
+You MUST call tools in this EXACT sequence, ONE AT A TIME:
+1. generate_architecture - FIRST, ALWAYS
+2. calculate_credits - SECOND, after architecture
+3. calculate_roi - THIRD, after credits
+
+NEVER skip steps. NEVER call multiple tools. Call ONE tool, then STOP and wait for the result.
 
 ## INTERACTION FLOW
 
@@ -365,14 +369,14 @@ IMPORTANT:
 - Always provide predefined options
 - Use "radio" for single-select, "checkbox" for multi-select
 
-### STEP 2: Generate Artifacts
-Once you receive the user's selections, you have enough info. Proceed to call tools ONE BY ONE:
+### STEP 2: Generate Artifacts Sequentially
+Once you receive the user's selections, call tools ONE BY ONE:
 
-**Call 1**: generate_architecture → Wait for result
-**Call 2**: calculate_credits → Wait for result  
-**Call 3**: calculate_roi → Wait for result
+**First**: Call generate_architecture → Stop and wait
+**Second**: Call calculate_credits → Stop and wait  
+**Third**: Call calculate_roi → Stop and wait
 
-**IMPORTANT**: Only call ONE tool per response. After you call a tool, STOP immediately and wait for the result.
+After EACH tool result, provide a brief 1-2 sentence summary, then immediately call the next tool.
 
 ---
 
@@ -467,11 +471,8 @@ Base Hourly Wage × 1.3 (30% overhead for benefits, taxes, insurance, equipment)
 - Present costs in a clear, easy-to-understand format
 - Highlight the value proposition (time saved, cost reduced)
 - Use the tools to generate structured data for the UI panels
-- After each tool call, provide a brief conversational summary of that result
-- After all three artifacts are generated, give a final summary of key takeaways
-
-## REMEMBER: ONE TOOL AT A TIME
-Never batch tool calls. Call one tool, wait for result, summarize, then call the next tool.`;
+- After each tool call, provide a brief 1-2 sentence summary
+- After all three artifacts are generated, give a final summary of key takeaways`;
 
 async function performWebSearch(query: string): Promise<string> {
   try {
@@ -515,108 +516,128 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const toolResults: { name: string; data: unknown }[] = [];
-
         const sendEvent = (event: string, data: unknown) => {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ event, data })}\n\n`)
           );
         };
 
-        const processResponse = async (
-          currentMessages: Anthropic.MessageParam[]
+        const runConversationLoop = async (
+          conversationMessages: Anthropic.MessageParam[]
         ): Promise<void> => {
-          const response = anthropic.messages.stream({
-            model: "claude-opus-4-5",
-            max_tokens: 8192,
-            system: systemPrompt,
-            tools,
-            messages: currentMessages,
-          });
+          const MAX_ITERATIONS = 10;
+          let iteration = 0;
+          let currentMessages = [...conversationMessages];
 
-          const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
-          let currentToolInput = "";
-          let currentToolId = "";
-          let currentToolName = "";
+          while (iteration < MAX_ITERATIONS) {
+            iteration++;
+            
+            let accumulatedText = "";
+            let toolUseBlock: Anthropic.ToolUseBlock | null = null;
+            let currentToolInput = "";
+            let isProcessingTool = false;
 
-          for await (const event of response) {
-            if (event.type === "content_block_delta") {
-              const delta = event.delta;
-              if ("text" in delta && delta.text) {
-                sendEvent("text", { content: delta.text });
-              } else if ("partial_json" in delta && delta.partial_json) {
-                currentToolInput += delta.partial_json;
-              }
-            } else if (event.type === "content_block_start") {
-              if (event.content_block.type === "tool_use") {
-                currentToolId = event.content_block.id;
-                currentToolName = event.content_block.name;
-                currentToolInput = "";
-                sendEvent("tool_start", { tool: currentToolName });
-              }
-            } else if (event.type === "content_block_stop") {
-              if (currentToolName && currentToolInput) {
-                try {
-                  const toolInput = JSON.parse(currentToolInput);
-                  const toolBlock: Anthropic.ToolUseBlock = {
-                    type: "tool_use",
-                    id: currentToolId,
-                    name: currentToolName,
-                    input: toolInput,
-                  };
-                  toolUseBlocks.push(toolBlock);
-                  
-                  if (currentToolName === "web_search") {
-                    const searchResult = await performWebSearch(toolInput.query);
-                    sendEvent("tool_result", { tool: currentToolName, data: { query: toolInput.query, result: searchResult } });
-                  } else {
-                    toolResults.push({ name: currentToolName, data: toolInput });
-                    sendEvent("tool_result", { tool: currentToolName, data: toolInput });
-                  }
-                } catch {
-                  console.error("Failed to parse tool input:", currentToolInput);
+            const response = anthropic.messages.stream({
+              model: "claude-opus-4-5",
+              max_tokens: 8192,
+              system: systemPrompt,
+              tools,
+              tool_choice: { type: "auto" },
+              messages: currentMessages,
+            });
+
+            for await (const event of response) {
+              if (event.type === "content_block_delta") {
+                const delta = event.delta;
+                if ("text" in delta && delta.text) {
+                  accumulatedText += delta.text;
+                  sendEvent("text", { content: delta.text });
+                } else if ("partial_json" in delta && delta.partial_json && isProcessingTool) {
+                  currentToolInput += delta.partial_json;
                 }
-                currentToolName = "";
-                currentToolInput = "";
+              } else if (event.type === "content_block_start") {
+                if (event.content_block.type === "tool_use" && !toolUseBlock) {
+                  isProcessingTool = true;
+                  sendEvent("tool_start", { tool: event.content_block.name });
+                  toolUseBlock = {
+                    type: "tool_use",
+                    id: event.content_block.id,
+                    name: event.content_block.name,
+                    input: {},
+                  };
+                  currentToolInput = "";
+                }
+              } else if (event.type === "content_block_stop") {
+                if (toolUseBlock && currentToolInput && isProcessingTool) {
+                  try {
+                    toolUseBlock.input = JSON.parse(currentToolInput);
+                  } catch {
+                    console.error("Failed to parse tool input");
+                  }
+                  isProcessingTool = false;
+                }
               }
             }
-          }
 
-          const finalMessage = await response.finalMessage();
+            const finalMessage = await response.finalMessage();
 
-          if (finalMessage.stop_reason === "tool_use" && toolUseBlocks.length > 0) {
-            const toolResultMessages: Anthropic.ToolResultBlockParam[] = await Promise.all(
-              toolUseBlocks.map(async (toolUse) => {
-                if (toolUse.name === "web_search") {
-                  const searchQuery = (toolUse.input as { query: string }).query;
-                  const searchResult = await performWebSearch(searchQuery);
-                  return {
-                    type: "tool_result" as const,
-                    tool_use_id: toolUse.id,
-                    content: searchResult,
-                  };
-                }
-                return {
-                  type: "tool_result" as const,
-                  tool_use_id: toolUse.id,
-                  content: JSON.stringify({ success: true, message: "Tool executed successfully" }),
-                };
-              })
-            );
+            if (finalMessage.stop_reason === "end_turn" || !toolUseBlock) {
+              sendEvent("done", {});
+              return;
+            }
 
-            const updatedMessages: Anthropic.MessageParam[] = [
+            let toolResultContent: string;
+            
+            if (toolUseBlock.name === "web_search") {
+              const searchQuery = (toolUseBlock.input as { query: string }).query;
+              toolResultContent = await performWebSearch(searchQuery);
+              sendEvent("tool_result", { 
+                tool: toolUseBlock.name, 
+                data: { query: searchQuery, result: toolResultContent } 
+              });
+            } else {
+              sendEvent("tool_result", { 
+                tool: toolUseBlock.name, 
+                data: toolUseBlock.input 
+              });
+              toolResultContent = JSON.stringify({ 
+                success: true, 
+                message: `${toolUseBlock.name} executed successfully. Data has been displayed to the user.` 
+              });
+            }
+
+            const assistantContent: (Anthropic.TextBlock | Anthropic.ToolUseBlock)[] = [];
+            if (accumulatedText) {
+              assistantContent.push({ type: "text", text: accumulatedText } as Anthropic.TextBlock);
+            }
+            assistantContent.push({
+              type: "tool_use",
+              id: toolUseBlock.id,
+              name: toolUseBlock.name,
+              input: toolUseBlock.input,
+            } as Anthropic.ToolUseBlock);
+
+            currentMessages = [
               ...currentMessages,
-              { role: "assistant" as const, content: finalMessage.content },
-              { role: "user" as const, content: toolResultMessages },
+              { role: "assistant" as const, content: assistantContent },
+              {
+                role: "user" as const,
+                content: [
+                  {
+                    type: "tool_result" as const,
+                    tool_use_id: toolUseBlock.id,
+                    content: toolResultContent,
+                  },
+                ],
+              },
             ];
-
-            await processResponse(updatedMessages);
           }
+
+          sendEvent("done", {});
         };
 
         try {
-          await processResponse(messages);
-          sendEvent("done", { tools: toolResults });
+          await runConversationLoop(messages);
         } catch (error) {
           console.error("Error in chat:", error);
           sendEvent("error", {

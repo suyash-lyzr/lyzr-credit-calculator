@@ -108,6 +108,13 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** True Sequential Streaming
+  - Rewrote API to use conversation loop for proper sequential tool execution
+  - Each tool result streams immediately to frontend as it completes
+  - Architecture → Credits → ROI appear one after another with loading states
+  - Replaced tabs with stacked vertical sections for progressive display
+  - Only processes first tool per response to ensure strict ordering
+
 - **2025-12-02:** Interactive Questionnaire UI
   - Added interactive questionnaire component with checkboxes and radio buttons
   - AI now asks only 2-3 focused questions with predefined options

@@ -1,19 +1,61 @@
 "use client";
 
 import * as React from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArchitectureDiagram } from "./architecture-diagram";
 import { CreditCalculation } from "./credit-calculation";
 import { ROICalculation } from "./roi-calculation";
 import { ArtifactState } from "@/lib/types";
-import { IconBrain, IconCalculator, IconChartBar, IconLoader2 } from "@tabler/icons-react";
+import { IconBrain, IconCalculator, IconChartBar, IconLoader2, IconCheck } from "@tabler/icons-react";
 
 interface ArtifactPanelProps {
   artifactState: ArtifactState;
 }
 
+interface SectionHeaderProps {
+  icon: React.ReactNode;
+  title: string;
+  stepNumber: number;
+  isLoading: boolean;
+  isComplete: boolean;
+}
+
+function SectionHeader({ icon, title, stepNumber, isLoading, isComplete }: SectionHeaderProps) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
+        isComplete ? 'bg-green-100 text-green-600' : 
+        isLoading ? 'bg-primary/10 text-primary' : 
+        'bg-muted text-muted-foreground'
+      }`}>
+        {isLoading ? (
+          <IconLoader2 className="h-4 w-4 animate-spin" />
+        ) : isComplete ? (
+          <IconCheck className="h-4 w-4" />
+        ) : (
+          <span className="text-sm font-medium">{stepNumber}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {icon}
+        <h3 className="font-semibold text-lg">{title}</h3>
+      </div>
+    </div>
+  );
+}
+
+function LoadingPlaceholder({ message }: { message: string }) {
+  return (
+    <div className="flex items-center justify-center py-12 bg-muted/30 rounded-lg border border-dashed">
+      <div className="text-center">
+        <IconLoader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </div>
+    </div>
+  );
+}
+
 export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
-  const [activeTab, setActiveTab] = React.useState("architecture");
+  const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const hasAnyData =
     artifactState.architecture ||
@@ -24,35 +66,11 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
     artifactState.isLoading.roi;
 
   React.useEffect(() => {
-    if (artifactState.isLoading.architecture || artifactState.architecture) {
-      setActiveTab("architecture");
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-    if (artifactState.isLoading.credits || artifactState.credits) {
-      setActiveTab("credits");
-    }
-    if (artifactState.isLoading.roi || artifactState.roi) {
-      setActiveTab("roi");
-    }
-  }, [artifactState.isLoading.architecture, artifactState.isLoading.credits, artifactState.isLoading.roi, artifactState.architecture, artifactState.credits, artifactState.roi]);
-
-  const getTabIcon = (tab: string, isLoading: boolean, hasData: boolean) => {
-    if (isLoading) {
-      return <IconLoader2 className="h-4 w-4 animate-spin" />;
-    }
-    
-    const iconClass = `h-4 w-4 ${hasData ? 'text-green-600' : 'text-muted-foreground'}`;
-    
-    switch (tab) {
-      case "architecture":
-        return <IconBrain className={iconClass} />;
-      case "credits":
-        return <IconCalculator className={iconClass} />;
-      case "roi":
-        return <IconChartBar className={iconClass} />;
-      default:
-        return null;
-    }
-  };
+  }, [artifactState.architecture, artifactState.credits, artifactState.roi, 
+      artifactState.isLoading.architecture, artifactState.isLoading.credits, artifactState.isLoading.roi]);
 
   return (
     <div className="flex h-full flex-col bg-muted/30 rounded-xl border overflow-hidden">
@@ -81,56 +99,67 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           </div>
         </div>
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-          <div className="border-b px-4 pt-2">
-            <TabsList className="w-full justify-start gap-1 bg-transparent p-0">
-              <TabsTrigger 
-                value="architecture" 
-                className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-lg rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary"
-              >
-                {getTabIcon("architecture", artifactState.isLoading.architecture, !!artifactState.architecture)}
-                <span>Architecture</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="credits"
-                className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-lg rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary"
-              >
-                {getTabIcon("credits", artifactState.isLoading.credits, !!artifactState.credits)}
-                <span>Credits</span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="roi"
-                className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-lg rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary"
-              >
-                {getTabIcon("roi", artifactState.isLoading.roi, !!artifactState.roi)}
-                <span>ROI</span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
-          
-          <div className="flex-1 overflow-auto p-4">
-            <TabsContent value="architecture" className="mt-0 h-full">
-              <ArchitectureDiagram
-                data={artifactState.architecture}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-8">
+          {(artifactState.isLoading.architecture || artifactState.architecture) && (
+            <section>
+              <SectionHeader
+                icon={<IconBrain className="h-5 w-5 text-primary" />}
+                title="Agent Architecture"
+                stepNumber={1}
                 isLoading={artifactState.isLoading.architecture}
+                isComplete={!!artifactState.architecture}
               />
-            </TabsContent>
-            
-            <TabsContent value="credits" className="mt-0 h-full">
-              <CreditCalculation
-                data={artifactState.credits}
+              {artifactState.isLoading.architecture && !artifactState.architecture ? (
+                <LoadingPlaceholder message="Analyzing requirements and designing architecture..." />
+              ) : (
+                <ArchitectureDiagram
+                  data={artifactState.architecture}
+                  isLoading={false}
+                />
+              )}
+            </section>
+          )}
+
+          {(artifactState.isLoading.credits || artifactState.credits) && (
+            <section>
+              <SectionHeader
+                icon={<IconCalculator className="h-5 w-5 text-primary" />}
+                title="Credit Calculation"
+                stepNumber={2}
                 isLoading={artifactState.isLoading.credits}
+                isComplete={!!artifactState.credits}
               />
-            </TabsContent>
-            
-            <TabsContent value="roi" className="mt-0 h-full">
-              <ROICalculation
-                data={artifactState.roi}
+              {artifactState.isLoading.credits && !artifactState.credits ? (
+                <LoadingPlaceholder message="Calculating credit costs with 20% overhead..." />
+              ) : (
+                <CreditCalculation
+                  data={artifactState.credits}
+                  isLoading={false}
+                />
+              )}
+            </section>
+          )}
+
+          {(artifactState.isLoading.roi || artifactState.roi) && (
+            <section>
+              <SectionHeader
+                icon={<IconChartBar className="h-5 w-5 text-primary" />}
+                title="ROI Analysis"
+                stepNumber={3}
                 isLoading={artifactState.isLoading.roi}
+                isComplete={!!artifactState.roi}
               />
-            </TabsContent>
-          </div>
-        </Tabs>
+              {artifactState.isLoading.roi && !artifactState.roi ? (
+                <LoadingPlaceholder message="Comparing AI costs vs human labor..." />
+              ) : (
+                <ROICalculation
+                  data={artifactState.roi}
+                  isLoading={false}
+                />
+              )}
+            </section>
+          )}
+        </div>
       )}
     </div>
   );
