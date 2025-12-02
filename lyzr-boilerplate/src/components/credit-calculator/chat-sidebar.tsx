@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ChatSession } from "@/lib/types";
+import Image from "next/image";
 
 const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
 
@@ -40,12 +40,16 @@ export function ChatSidebar({
   return (
     <Sidebar collapsible="none" className="border-r" {...props}>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-2">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={LYZR_LOGO} alt="Lyzr" />
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs">L</AvatarFallback>
-          </Avatar>
-          <span className="text-lg font-semibold">Lyzr Credits</span>
+        <div className="flex items-center gap-3">
+          <Image
+            src={LYZR_LOGO}
+            alt="Lyzr"
+            width={32}
+            height={32}
+            className="object-contain"
+            unoptimized
+          />
+          <span className="text-lg font-semibold">Credit Calculator</span>
         </div>
         <Button onClick={onNewSession} className="mt-4 w-full" size="sm">
           <IconPlus className="mr-2 h-4 w-4" />

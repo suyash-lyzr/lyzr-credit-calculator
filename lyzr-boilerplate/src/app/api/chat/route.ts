@@ -459,7 +459,6 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        let fullContent = "";
         const toolResults: { name: string; data: unknown }[] = [];
 
         const sendEvent = (event: string, data: unknown) => {
@@ -471,37 +470,65 @@ export async function POST(request: NextRequest) {
         const processResponse = async (
           currentMessages: Anthropic.MessageParam[]
         ): Promise<void> => {
-          const response = await anthropic.messages.create({
-            model: "claude-sonnet-4-20250514",
+          const response = anthropic.messages.stream({
+            model: "claude-sonnet-4-5-20250514",
             max_tokens: 8192,
             system: systemPrompt,
             tools,
             messages: currentMessages,
           });
 
-          for (const block of response.content) {
-            if (block.type === "text") {
-              fullContent += block.text;
-              sendEvent("text", { content: block.text });
-            } else if (block.type === "tool_use") {
-              sendEvent("tool_start", { tool: block.name });
-              
-              if (block.name === "web_search") {
-                const searchQuery = (block.input as { query: string }).query;
-                const searchResult = await performWebSearch(searchQuery);
-                sendEvent("tool_result", { tool: block.name, data: { query: searchQuery, result: searchResult } });
-              } else {
-                toolResults.push({ name: block.name, data: block.input });
-                sendEvent("tool_result", { tool: block.name, data: block.input });
+          const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
+          let currentToolInput = "";
+          let currentToolId = "";
+          let currentToolName = "";
+
+          for await (const event of response) {
+            if (event.type === "content_block_delta") {
+              const delta = event.delta;
+              if ("text" in delta && delta.text) {
+                sendEvent("text", { content: delta.text });
+              } else if ("partial_json" in delta && delta.partial_json) {
+                currentToolInput += delta.partial_json;
+              }
+            } else if (event.type === "content_block_start") {
+              if (event.content_block.type === "tool_use") {
+                currentToolId = event.content_block.id;
+                currentToolName = event.content_block.name;
+                currentToolInput = "";
+                sendEvent("tool_start", { tool: currentToolName });
+              }
+            } else if (event.type === "content_block_stop") {
+              if (currentToolName && currentToolInput) {
+                try {
+                  const toolInput = JSON.parse(currentToolInput);
+                  const toolBlock: Anthropic.ToolUseBlock = {
+                    type: "tool_use",
+                    id: currentToolId,
+                    name: currentToolName,
+                    input: toolInput,
+                  };
+                  toolUseBlocks.push(toolBlock);
+                  
+                  if (currentToolName === "web_search") {
+                    const searchResult = await performWebSearch(toolInput.query);
+                    sendEvent("tool_result", { tool: currentToolName, data: { query: toolInput.query, result: searchResult } });
+                  } else {
+                    toolResults.push({ name: currentToolName, data: toolInput });
+                    sendEvent("tool_result", { tool: currentToolName, data: toolInput });
+                  }
+                } catch {
+                  console.error("Failed to parse tool input:", currentToolInput);
+                }
+                currentToolName = "";
+                currentToolInput = "";
               }
             }
           }
 
-          if (response.stop_reason === "tool_use") {
-            const toolUseBlocks = response.content.filter(
-              (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
-            );
+          const finalMessage = await response.finalMessage();
 
+          if (finalMessage.stop_reason === "tool_use" && toolUseBlocks.length > 0) {
             const toolResultMessages: Anthropic.ToolResultBlockParam[] = await Promise.all(
               toolUseBlocks.map(async (toolUse) => {
                 if (toolUse.name === "web_search") {
@@ -523,7 +550,7 @@ export async function POST(request: NextRequest) {
 
             const updatedMessages: Anthropic.MessageParam[] = [
               ...currentMessages,
-              { role: "assistant" as const, content: response.content },
+              { role: "assistant" as const, content: finalMessage.content },
               { role: "user" as const, content: toolResultMessages },
             ];
 
@@ -533,7 +560,7 @@ export async function POST(request: NextRequest) {
 
         try {
           await processResponse(messages);
-          sendEvent("done", { content: fullContent, tools: toolResults });
+          sendEvent("done", { tools: toolResults });
         } catch (error) {
           console.error("Error in chat:", error);
           sendEvent("error", {

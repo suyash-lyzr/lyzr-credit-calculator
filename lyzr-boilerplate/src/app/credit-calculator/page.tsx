@@ -299,8 +299,8 @@ export default function CreditCalculatorPage() {
           onDeleteSession={deleteSession}
           className="w-64 shrink-0"
         />
-        <div className="flex flex-1 min-w-0">
-          <div className="w-[40%] min-w-0 border-r">
+        <div className="flex flex-1 min-w-0 h-screen overflow-hidden">
+          <div className="w-[40%] min-w-0 border-r h-full overflow-hidden">
             <ChatInterface
               messages={activeSession?.messages || []}
               isLoading={isLoading}

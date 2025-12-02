@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
         hostname: 's3-us-west-2.amazonaws.com',
         pathname: '/cbi-image-service-prd/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'cdn2.futurepedia.io',
+        pathname: '/**',
+      },
     ],
   },
 };
