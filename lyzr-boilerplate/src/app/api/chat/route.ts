@@ -303,6 +303,8 @@ You provide precise, data-driven cost estimates. Be conversational but professio
 - NEVER use emojis in ANY response - no emojis in text, diagrams, or anywhere
 - NEVER show raw Mermaid code in chat - the diagram renders in the artifact panel
 - Use clean markdown formatting with proper bullet points and structure
+- NEVER ask a second questionnaire - only ONE questionnaire per conversation, then proceed to tools
+- When user message starts with "My selections:" - STOP asking questions, START calling tools
 
 ## CRITICAL: SEQUENTIAL TOOL EXECUTION
 Call tools ONE AT A TIME in this order:
@@ -345,7 +347,8 @@ When user describes their use case, ask 2-3 quick questions using this JSON form
 \`\`\`
 
 ### STEP 2: Analyze & Calculate
-After getting user selections, call tools sequentially:
+CRITICAL: Once you receive user selections (e.g., "My selections: ..."), DO NOT output another questionnaire. 
+Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
 1. generate_architecture - Analyze use case and determine N variables
 2. calculate_credits - Apply exact formulas to compute costs
 3. calculate_roi - Compare AI vs human costs
@@ -602,6 +605,7 @@ export async function POST(request: NextRequest) {
             const response = anthropic.messages.stream({
               model: "claude-opus-4-5",
               max_tokens: 8192,
+              temperature: 0.3,
               system: systemPrompt,
               tools,
               tool_choice: { type: "auto" },

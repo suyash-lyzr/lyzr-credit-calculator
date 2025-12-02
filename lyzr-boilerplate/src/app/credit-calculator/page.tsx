@@ -327,6 +327,7 @@ export default function CreditCalculatorPage() {
               isLoading={isLoading}
               onSendMessage={sendMessage}
               streamingContent={streamingContent}
+              hasArtifacts={!!(artifactState.architecture || artifactState.credits || artifactState.roi)}
             />
           </div>
           <div className="w-[60%] min-w-0 p-1.5">

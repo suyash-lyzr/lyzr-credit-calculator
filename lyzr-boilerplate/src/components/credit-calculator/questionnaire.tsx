@@ -70,12 +70,12 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
 
   return (
     <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-      <CardHeader className="pb-3">
+      <CardHeader className="py-2 px-3">
         <CardTitle className="text-sm font-medium">{data.intro}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-3 px-3 pb-3">
         {data.questions.map((question) => (
-          <div key={question.id} className="space-y-3">
+          <div key={question.id} className="space-y-1.5">
             <Label className="text-sm font-medium text-foreground">
               {question.question}
             </Label>
@@ -84,45 +84,61 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
               <RadioGroup
                 value={responses[question.id] as string || ""}
                 onValueChange={(value) => handleRadioChange(question.id, value)}
-                className="grid grid-cols-2 gap-2"
+                className="grid grid-cols-2 gap-1.5"
               >
-                {question.options.map((option) => (
-                  <div
-                    key={option}
-                    className="flex items-center space-x-2 rounded-lg border bg-background p-3 cursor-pointer hover:bg-accent transition-colors"
-                  >
-                    <RadioGroupItem value={option} id={`${question.id}-${option}`} />
-                    <Label
-                      htmlFor={`${question.id}-${option}`}
-                      className="text-sm cursor-pointer flex-1"
+                {question.options.map((option) => {
+                  const isSelected = responses[question.id] === option;
+                  return (
+                    <div
+                      key={option}
+                      onClick={() => handleRadioChange(question.id, option)}
+                      className={`flex items-center gap-2 rounded-lg border-2 p-2.5 cursor-pointer transition-all ${
+                        isSelected 
+                          ? "bg-primary/10 border-primary" 
+                          : "bg-background border-primary/30 hover:border-primary/50 hover:bg-accent"
+                      }`}
                     >
-                      {option}
-                    </Label>
-                  </div>
-                ))}
+                      <RadioGroupItem 
+                        value={option} 
+                        id={`${question.id}-${option}`}
+                        className="border-primary/50 data-[state=checked]:border-primary"
+                      />
+                      <Label
+                        htmlFor={`${question.id}-${option}`}
+                        className="text-sm cursor-pointer flex-1 leading-tight"
+                      >
+                        {option}
+                      </Label>
+                    </div>
+                  );
+                })}
               </RadioGroup>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {question.options.map((option) => {
                   const isChecked = ((responses[question.id] as string[]) || []).includes(option);
                   return (
                     <div
                       key={option}
-                      className={`flex items-center space-x-2 rounded-lg border p-3 cursor-pointer transition-colors ${
-                        isChecked ? "bg-primary/10 border-primary" : "bg-background hover:bg-accent"
-                      }`}
                       onClick={() => handleCheckboxChange(question.id, option, !isChecked)}
+                      className={`flex items-center gap-2 rounded-lg border-2 p-2.5 cursor-pointer transition-all ${
+                        isChecked 
+                          ? "bg-primary/10 border-primary" 
+                          : "bg-background border-primary/30 hover:border-primary/50 hover:bg-accent"
+                      }`}
                     >
                       <Checkbox
                         id={`${question.id}-${option}`}
                         checked={isChecked}
+                        className="border-primary/50 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                         onCheckedChange={(checked) =>
                           handleCheckboxChange(question.id, option, checked as boolean)
                         }
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <Label
                         htmlFor={`${question.id}-${option}`}
-                        className="text-sm cursor-pointer flex-1"
+                        className="text-sm cursor-pointer flex-1 leading-tight"
                       >
                         {option}
                       </Label>
@@ -137,8 +153,8 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
         <Button
           onClick={handleSubmit}
           disabled={!isComplete || isLoading}
-          className="w-full mt-4"
-          size="lg"
+          className="w-full mt-2"
+          size="default"
         >
           <IconSend className="mr-2 h-4 w-4" />
           Calculate Credits & ROI

@@ -20,6 +20,7 @@ interface ChatInterfaceProps {
   isLoading: boolean;
   onSendMessage: (message: string) => void;
   streamingContent?: string;
+  hasArtifacts?: boolean;
 }
 
 function removeQuestionnaireJson(content: string): string {
@@ -46,6 +47,7 @@ export function ChatInterface({
   isLoading,
   onSendMessage,
   streamingContent,
+  hasArtifacts = false,
 }: ChatInterfaceProps) {
   const [input, setInput] = React.useState("");
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -95,7 +97,7 @@ export function ChatInterface({
             </ReactMarkdown>
           </div>
         )}
-        {questionnaire && isLastAssistantMessage && !isLoading && (
+        {questionnaire && isLastAssistantMessage && !isLoading && !hasArtifacts && (
           <div className="mt-3">
             <Questionnaire
               data={questionnaire}
