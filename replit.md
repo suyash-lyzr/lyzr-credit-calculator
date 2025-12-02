@@ -124,6 +124,14 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Improvements to Chat & ROI Calculation
+  - Added no-emoji instruction to all responses (chat AND diagrams)
+  - Fixed text overflow in chat message bubbles (proper word wrapping)
+  - Enhanced ROI calculation with realistic US labor rates table
+  - Added 1.3x loaded rate formula for human cost calculation (>80% savings target)
+  - Fixed hydration error from Mermaid ID generation (removed Math.random() in useState)
+  - Improved markdown formatting with proper bullet points and structure
+
 - **2025-12-02:** UI Polish & Layout Updates
   - Landing page now shows sidebar with "Credit Calculator" header and chat history
   - Mermaid canvas fixed to 1/3 of artifact area (200px, max 33vh)

@@ -23,6 +23,7 @@ const complexityColors = {
 export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = React.useState<string>("");
+  const renderCountRef = React.useRef(0);
 
   React.useEffect(() => {
     mermaid.initialize({
@@ -46,20 +47,18 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
     });
   }, []);
 
-  const [mermaidId] = React.useState(() => `mermaid-${Math.random().toString(36).substring(2, 9)}`);
-
   React.useEffect(() => {
     if (data?.mermaidCode) {
       console.log("[Mermaid] Attempting to render diagram:", data.mermaidCode.substring(0, 100) + "...");
       const renderDiagram = async () => {
         try {
-          const id = mermaidId;
+          const uniqueId = `mermaid-${Date.now()}-${renderCountRef.current}`;
           const cleanCode = data.mermaidCode
             .replace(/```mermaid\n?/g, '')
             .replace(/```\n?/g, '')
             .trim();
           console.log("[Mermaid] Clean code:", cleanCode.substring(0, 100) + "...");
-          const { svg } = await mermaid.render(id, cleanCode);
+          const { svg } = await mermaid.render(uniqueId, cleanCode);
           console.log("[Mermaid] Render successful, SVG length:", svg.length);
           setSvgContent(svg);
         } catch (error) {
@@ -73,7 +72,7 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
       };
       renderDiagram();
     }
-  }, [data?.mermaidCode, mermaidId]);
+  }, [data?.mermaidCode]);
 
   return (
     <Card className="flex flex-col h-full overflow-hidden border-0 shadow-none bg-transparent">
