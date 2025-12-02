@@ -55,6 +55,15 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
         <span className="font-medium">Agent Actions</span> (effort), not tokens.
       </p>
 
+      {data.agent_architecture_summary && (
+        <div className="bg-muted/30 rounded-lg px-3 py-2">
+          <p className="text-sm text-foreground/70">
+            <span className="font-medium text-foreground">Architecture:</span>{" "}
+            {data.agent_architecture_summary}
+          </p>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-lg border">
         <table className="w-full text-sm">
           <thead>

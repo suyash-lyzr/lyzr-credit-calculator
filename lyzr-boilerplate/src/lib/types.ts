@@ -50,6 +50,7 @@ export interface CalculationDetails {
 }
 
 export interface CreditCalculation {
+  agent_architecture_summary: string;
   action_profile: string;
   complexity: string;
   unit_price: number;

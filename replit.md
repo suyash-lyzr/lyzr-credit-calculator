@@ -124,6 +124,12 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Questionnaire UX & Architecture Summary
+  - Hide raw JSON streaming when questionnaire is generating - shows "Preparing follow-up questions..." thinking state instead
+  - Added agent_architecture_summary to credit calculation - shows agent flow (e.g., "3-Agent Chain: Ingestion → Extraction → Validation with KB")
+  - Added strict confidentiality rules - micro-costing and rate card formulas are NEVER exposed to users
+  - Credit calculation now references the built architecture for context
+
 - **2025-12-02:** Exact Calculation Engine Implementation
   - Completely rewrote system prompt with exact rate card formulas from confidential intelligence
   - Fixed volume math: Vol_User is monthly, N_Runs_Annual = Vol_User × 12 × 1.20

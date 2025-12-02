@@ -26,6 +26,21 @@ function removeQuestionnaireJson(content: string): string {
   return content.replace(/```json\s*\{[\s\S]*?"type":\s*"questionnaire"[\s\S]*?\}\s*```/g, '').trim();
 }
 
+function isStreamingQuestionnaire(content: string): boolean {
+  const jsonStart = content.includes('```json') && content.includes('"type"');
+  const hasQuestionnaireMarker = content.includes('"questionnaire"') || content.includes('"questions"');
+  const isIncomplete = !content.includes('```\n') || (content.match(/```/g) || []).length < 2;
+  return jsonStart && (hasQuestionnaireMarker || isIncomplete);
+}
+
+function getPreQuestionnaireText(content: string): string {
+  const jsonIndex = content.indexOf('```json');
+  if (jsonIndex > 0) {
+    return content.substring(0, jsonIndex).trim();
+  }
+  return '';
+}
+
 export function ChatInterface({
   messages,
   isLoading,
@@ -175,11 +190,27 @@ export function ChatInterface({
                 />
               </div>
               <div className="max-w-[85%] rounded-2xl px-4 py-2 bg-muted">
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {removeQuestionnaireJson(streamingContent)}
-                  </ReactMarkdown>
-                </div>
+                {isStreamingQuestionnaire(streamingContent) ? (
+                  <div className="space-y-2">
+                    {getPreQuestionnaireText(streamingContent) && (
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {getPreQuestionnaireText(streamingContent)}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <IconLoader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Preparing follow-up questions...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {removeQuestionnaireJson(streamingContent)}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </div>
             </div>
           )}
