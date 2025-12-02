@@ -5,6 +5,8 @@ This is an interactive Lyzr Credit Calculator built with Next.js 15, TypeScript,
 
 **Current State:** Fully configured and running on Replit
 **Last Updated:** December 2, 2025
+**Model:** Claude Opus 4.5 (claude-opus-4-5)
+
 ## Application Features
 
 ### Credit Calculator
