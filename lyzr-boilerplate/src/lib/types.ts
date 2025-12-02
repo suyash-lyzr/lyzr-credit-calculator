@@ -13,95 +13,49 @@ export interface ChatSession {
   updatedAt: Date;
 }
 
-export interface ConnectionAnalysis {
-  knowledge_bases: number;
-  data_connectors: number;
-  tools: number;
-  total_connections: number;
+export interface ArchitectureCounts {
+  n_agents: number;
+  n_kb: number;
+  n_rai: number;
+  n_tools: number;
 }
 
-export interface AgentInfo {
-  name: string;
-  role: string;
-  description?: string;
-}
-
-export interface WorkflowStep {
-  step: number;
-  name: string;
-  detail: string;
+export interface ScenarioVariables {
+  b_mem: number;
+  b_kb: number;
+  b_rai: number;
+  b_api: number;
 }
 
 export interface ArchitectureData {
   title: string;
   summary: string;
   complexity_profile: "LOW" | "MEDIUM" | "HIGH";
-  architecture_pattern: "Single Agent" | "Manager-Subagent" | "Hybrid";
-  connection_analysis: ConnectionAnalysis;
-  workflow_type: "Sequential" | "One-Shot Aggregation" | "Human-in-the-Loop";
-  agents: AgentInfo[];
-  steps: WorkflowStep[];
+  architecture_pattern: "Single Agent" | "Orchestrator" | "Multi-Agent Chain";
+  architecture_counts: ArchitectureCounts;
+  scenario_variables: ScenarioVariables;
   mermaidCode: string;
 }
 
-export interface CostItem {
-  count: number;
-  unit_cost: number;
-  total: number;
-}
-
-export interface ModelCosts {
-  model: string;
-  input_tokens: number;
-  output_tokens: number;
-  raw_cost: number;
-  handling_markup: number;
-  total: number;
-}
-
-export interface FixedCosts {
-  agents: CostItem;
-  knowledge_bases: CostItem;
-  responsible_ai: CostItem;
-  tools: CostItem;
-  subtotal: number;
-}
-
-export interface VariableCostsPerRun {
-  agent_runs: CostItem;
-  kb_retrievals: CostItem;
-  api_calls: CostItem;
-  tool_executions: CostItem;
-  rai_checks: CostItem;
-  memory: CostItem;
-  session: CostItem;
-  model_costs: ModelCosts;
-  subtotal: number;
-}
-
-export interface VolumeEstimates {
-  tasks_per_day: number;
-  tasks_per_month: number;
-  tasks_per_year: number;
-}
-
-export interface TotalCosts {
-  setup_cost: number;
-  monthly_variable: number;
-  yearly_variable: number;
-  first_year_total: number;
+export interface CalculationDetails {
+  vol_user_monthly: number;
+  n_sessions_annual: number;
+  n_runs_annual: number;
+  cost_fixed: number;
+  cost_model: number;
+  cost_inference: number;
+  session_cost_total: number;
+  inference_cost_total: number;
+  model_used: string;
 }
 
 export interface CreditCalculation {
-  architecture_summary: string;
-  complexity_profile: "LOW" | "MEDIUM" | "HIGH";
-  fixed_costs: FixedCosts;
-  variable_costs_per_run: VariableCostsPerRun;
-  cost_per_run: number;
-  overhead_percentage: number;
-  cost_per_run_with_overhead: number;
-  volume_estimates: VolumeEstimates;
-  total_costs: TotalCosts;
+  action_profile: string;
+  complexity: string;
+  unit_price: number;
+  total_volume: number;
+  total_annual_cost: number;
+  calculation_details: CalculationDetails;
 }
 
 export interface HumanAnalysis {

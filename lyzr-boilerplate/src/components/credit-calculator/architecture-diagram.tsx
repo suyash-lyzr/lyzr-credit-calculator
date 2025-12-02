@@ -46,12 +46,14 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
     });
   }, []);
 
+  const [mermaidId] = React.useState(() => `mermaid-${Math.random().toString(36).substring(2, 9)}`);
+
   React.useEffect(() => {
     if (data?.mermaidCode) {
       console.log("[Mermaid] Attempting to render diagram:", data.mermaidCode.substring(0, 100) + "...");
       const renderDiagram = async () => {
         try {
-          const id = `mermaid-${Date.now()}`;
+          const id = mermaidId;
           const cleanCode = data.mermaidCode
             .replace(/```mermaid\n?/g, '')
             .replace(/```\n?/g, '')
@@ -71,7 +73,7 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
       };
       renderDiagram();
     }
-  }, [data?.mermaidCode]);
+  }, [data?.mermaidCode, mermaidId]);
 
   return (
     <Card className="flex flex-col h-full overflow-hidden border-0 shadow-none bg-transparent">
@@ -91,9 +93,9 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
           <div className="mt-1 flex gap-2 text-[10px] text-muted-foreground">
             <span>Pattern: {data.architecture_pattern}</span>
             <span>|</span>
-            <span>KB: {data.connection_analysis.knowledge_bases}</span>
-            <span>DC: {data.connection_analysis.data_connectors}</span>
-            <span>Tools: {data.connection_analysis.tools}</span>
+            <span>Agents: {data.architecture_counts.n_agents}</span>
+            <span>KB: {data.architecture_counts.n_kb}</span>
+            <span>Tools: {data.architecture_counts.n_tools}</span>
           </div>
         )}
       </CardHeader>

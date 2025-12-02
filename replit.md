@@ -44,12 +44,28 @@ A Claude-like chat interface that helps users understand the cost and ROI of bui
 - Test 2: Workflow Analysis (Sequential, Aggregation, Human-in-Loop)
 - Classification: LOW (0.12 credits), MEDIUM (0.30), HIGH (0.52)
 
-**Part 3: Calculation Logic**
-- Fixed Costs: KB ($1), RAI ($1), Tool ($0.10), Agent ($0.05)
-- Variable Costs: API ($0.20), KB Retrieval ($0.05), Memory ($0.005), etc.
-- Model Costs: 25% handling markup
-- 20% overhead for testing/simulation
-- ROI: 1.3x fully loaded labor rates
+**Part 3: Calculation Engine (Exact Formulas)**
+Uses the confidential Lyzr rate card with exact formulas:
+
+**Fixed Setup Cost:**
+`Cost_Fixed = (N_Agents × $0.05) + (N_KB × $1.00) + (N_RAI × $1.00) + (N_Tools × $0.10)`
+
+**Model Cost Per Inference (2000 in / 500 out tokens):**
+- LOW → GPT_NANO: ~$0.000375
+- MEDIUM → GPT_MINI: ~$0.001875  
+- HIGH → GPT_MAIN: ~$0.009375
+
+**Variable Cost Per Inference:**
+`Cost_Inference = Cost_Model + $0.05 + (B_Mem × $0.005) + (B_KB × $0.05) + (B_RAI × $0.15) + (B_API × $0.20)`
+
+**Volume Dynamics:**
+- N_Runs_Annual = Monthly_Volume × 12 × 1.20 (20% buffer)
+- N_Sessions = Chat: Vol/5, Transactional: Vol
+
+**Total Annual Cost:**
+`Total_Annual = Cost_Fixed + (N_Sessions_Annual × $0.05) + (N_Runs_Annual × Cost_Inference)`
+
+ROI: 1.3x fully loaded labor rates comparison
 
 ### Tools
 1. `generate_architecture` - Assess complexity, create Mermaid diagram
@@ -108,6 +124,15 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Exact Calculation Engine Implementation
+  - Completely rewrote system prompt with exact rate card formulas from confidential intelligence
+  - Fixed volume math: Vol_User is monthly, N_Runs_Annual = Vol_User × 12 × 1.20
+  - Added complete calculation breakdown: Cost_Fixed, Cost_Model, Cost_Inference, N_Sessions, N_Runs
+  - Simplified credit table output: Action Profile | Complexity | Unit Price | Volume | Total Annual
+  - Simplified ROI table: Human vs AI comparison with net savings
+  - Tightened UI spacing throughout artifact panel
+  - Fixed Mermaid ID generation to avoid hydration errors
+
 - **2025-12-02:** True Sequential Streaming
   - Rewrote API to use conversation loop for proper sequential tool execution
   - Each tool result streams immediately to frontend as it completes
