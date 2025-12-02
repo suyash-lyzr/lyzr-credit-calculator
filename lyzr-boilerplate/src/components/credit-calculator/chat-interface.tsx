@@ -5,11 +5,13 @@ import { IconSend, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
@@ -49,12 +51,13 @@ export function ChatInterface({
           {messages.length === 0 && !streamingContent && (
             <div className="flex h-[calc(100vh-250px)] items-center justify-center">
               <div className="text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-r from-[#603BFC] to-[#A94FA1]">
-                  <span className="text-2xl font-bold text-white">L</span>
-                </div>
+                <Avatar className="mx-auto mb-4 h-16 w-16">
+                  <AvatarImage src={LYZR_LOGO} alt="Lyzr" />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xl">L</AvatarFallback>
+                </Avatar>
                 <h2 className="mb-2 text-xl font-semibold">Lyzr Credit Calculator</h2>
                 <p className="text-muted-foreground">
-                  Describe your automation needs and I&apos;ll calculate the credits and ROI
+                  Describe your use case and I&apos;ll calculate the credits and ROI
                 </p>
               </div>
             </div>
@@ -70,9 +73,8 @@ export function ChatInterface({
             >
               {message.role === "assistant" && (
                 <Avatar className="h-8 w-8 shrink-0">
-                  <AvatarFallback className="bg-gradient-to-r from-[#603BFC] to-[#A94FA1] text-white text-xs">
-                    L
-                  </AvatarFallback>
+                  <AvatarImage src={LYZR_LOGO} alt="Lyzr" />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">L</AvatarFallback>
                 </Avatar>
               )}
               <div
@@ -106,9 +108,8 @@ export function ChatInterface({
           {streamingContent && (
             <div className="flex gap-3 justify-start">
               <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback className="bg-gradient-to-r from-[#603BFC] to-[#A94FA1] text-white text-xs">
-                  L
-                </AvatarFallback>
+                <AvatarImage src={LYZR_LOGO} alt="Lyzr" />
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">L</AvatarFallback>
               </Avatar>
               <div className="max-w-[80%] rounded-2xl px-4 py-2 bg-muted">
                 <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -123,9 +124,8 @@ export function ChatInterface({
           {isLoading && !streamingContent && (
             <div className="flex gap-3 justify-start">
               <Avatar className="h-8 w-8 shrink-0">
-                <AvatarFallback className="bg-gradient-to-r from-[#603BFC] to-[#A94FA1] text-white text-xs">
-                  L
-                </AvatarFallback>
+                <AvatarImage src={LYZR_LOGO} alt="Lyzr" />
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">L</AvatarFallback>
               </Avatar>
               <div className="flex items-center gap-2 rounded-2xl bg-muted px-4 py-2">
                 <IconLoader2 className="h-4 w-4 animate-spin" />
@@ -142,7 +142,7 @@ export function ChatInterface({
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe your automation needs..."
+            placeholder="Describe your use case..."
             disabled={isLoading}
             className="flex-1"
           />

@@ -5,6 +5,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { ChatSidebar } from "@/components/credit-calculator/chat-sidebar";
 import { ChatInterface } from "@/components/credit-calculator/chat-interface";
 import { ArtifactPanel } from "@/components/credit-calculator/artifact-panel";
+import { LandingPage } from "@/components/credit-calculator/landing-page";
 import {
   ChatSession,
   ChatMessage,
@@ -33,7 +34,7 @@ export default function CreditCalculatorPage() {
       roi: false,
     },
   });
-  const [isInitialized, setIsInitialized] = React.useState(false);
+  const [hasStartedConversation, setHasStartedConversation] = React.useState(false);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -57,6 +58,7 @@ export default function CreditCalculatorPage() {
 
   const selectSession = React.useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
+    setHasStartedConversation(true);
     setArtifactState({
       architecture: null,
       credits: null,
@@ -70,7 +72,12 @@ export default function CreditCalculatorPage() {
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       if (activeSessionId === sessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
-        setActiveSessionId(remaining.length > 0 ? remaining[0].id : null);
+        if (remaining.length > 0) {
+          setActiveSessionId(remaining[0].id);
+        } else {
+          setActiveSessionId(null);
+          setHasStartedConversation(false);
+        }
       }
     },
     [activeSessionId, sessions]
@@ -98,6 +105,8 @@ export default function CreditCalculatorPage() {
           isLoading: { architecture: false, credits: false, roi: false },
         });
       }
+
+      setHasStartedConversation(true);
 
       const userMessage: ChatMessage = {
         id: generateId(),
@@ -270,12 +279,14 @@ export default function CreditCalculatorPage() {
     [activeSessionId, sessions]
   );
 
-  React.useEffect(() => {
-    if (!isInitialized) {
-      setIsInitialized(true);
-      createNewSession();
-    }
-  }, [isInitialized, createNewSession]);
+  if (!hasStartedConversation) {
+    return (
+      <LandingPage
+        onSubmit={sendMessage}
+        isLoading={isLoading}
+      />
+    );
+  }
 
   return (
     <SidebarProvider defaultOpen={true}>

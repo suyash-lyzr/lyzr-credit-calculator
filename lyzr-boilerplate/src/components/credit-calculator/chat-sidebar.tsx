@@ -16,7 +16,10 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ChatSession } from "@/lib/types";
+
+const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
 
 interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   sessions: ChatSession[];
@@ -38,9 +41,10 @@ export function ChatSidebar({
     <Sidebar collapsible="none" className="border-r" {...props}>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-r from-[#603BFC] to-[#A94FA1]">
-            <span className="text-sm font-bold text-white">L</span>
-          </div>
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={LYZR_LOGO} alt="Lyzr" />
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs">L</AvatarFallback>
+          </Avatar>
           <span className="text-lg font-semibold">Lyzr Credits</span>
         </div>
         <Button onClick={onNewSession} className="mt-4 w-full" size="sm">
