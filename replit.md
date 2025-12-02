@@ -12,19 +12,22 @@ This is an interactive Lyzr Credit Calculator built with Next.js 15, TypeScript,
 A Claude-like chat interface that helps users understand the cost and ROI of building AI agents on the Lyzr platform.
 
 **Features:**
+- **Landing Page**: Simple centered layout with Lyzr logo, heading, and input box
 - **Chat Interface**: Full conversation experience with markdown support (40% width)
 - **Architecture Diagram**: Mermaid-rendered agent flow diagrams with complexity badges
 - **Credit Calculation**: Detailed cost breakdown using exact rate card with 20% overhead
 - **ROI Calculation**: Comparison against human labor costs with fully loaded rates (60% width)
 
 **How it works:**
-1. User describes their automation needs
-2. AI assesses complexity (LOW/MEDIUM/HIGH) using Connection & Workflow tests
-3. AI generates three artifacts:
+1. User lands on a clean page with Lyzr logo and single input
+2. User describes their use case
+3. UI transitions to 40-60 split layout
+4. AI assesses complexity (LOW/MEDIUM/HIGH) using Connection & Workflow tests
+5. AI generates three artifacts:
    - Agent architecture diagram with complexity profile
    - Credit cost calculation (fixed + variable + 20% overhead)
    - ROI comparison vs human costs (with 1.3x fully loaded rates)
-4. Conversation can continue with updates to calculations
+6. Conversation can continue with updates to calculations
 
 ## Agent Architecture
 
@@ -58,7 +61,7 @@ A Claude-like chat interface that helps users understand the cost and ROI of bui
 ### Technology Stack
 - **Framework:** Next.js 15.5.0 with App Router
 - **Language:** TypeScript 5
-- **AI:** Anthropic Claude 3.5 Sonnet (user's API key)
+- **AI:** Anthropic Claude Sonnet 4 (user's API key)
 - **Styling:** Tailwind CSS 4 with tw-animate-css
 - **UI Components:** shadcn/ui with Radix UI primitives
 - **Diagrams:** Mermaid.js
@@ -71,10 +74,11 @@ lyzr-boilerplate/
 ├── src/
 │   ├── app/
 │   │   ├── api/chat/         # Streaming API with Claude tool use
-│   │   ├── credit-calculator/ # Main application page (40-60 split)
+│   │   ├── credit-calculator/ # Main application page
 │   │   └── layout.tsx
 │   ├── components/
 │   │   ├── credit-calculator/
+│   │   │   ├── landing-page.tsx       # Initial landing with logo and input
 │   │   │   ├── chat-sidebar.tsx
 │   │   │   ├── chat-interface.tsx
 │   │   │   ├── artifact-panel.tsx
@@ -103,13 +107,20 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** UI Improvements
+  - Added clean landing page with Lyzr logo and single input
+  - Page transitions to 40-60 split after first message
+  - Replaced all gradient "L" icons with actual Lyzr logo
+  - Changed "automation" to "use case" throughout
+  - Added example chips for quick starts
+  - Updated model to claude-sonnet-4-20250514
+
 - **2025-12-02:** Major Update - Sophisticated 3-Part Agent Architecture
   - Implemented Complexity Assessment Matrix (LOW/MEDIUM/HIGH)
   - Added exact rate card with 20% overhead calculation
   - Web search for real-time US labor rates
   - Fully loaded cost calculation (1.3x multiplier)
   - 40-60 layout split (chat vs calculation panel)
-  - Updated all artifact components for new data structures
 
 ## Development
 
@@ -146,5 +157,6 @@ npm run build
 - `/credit-calculator` - Main application
 
 ## User Preferences
-- Layout: 40% chat, 60% calculation results
+- Layout: Landing page → 40% chat, 60% calculation results
 - Uses own Anthropic API key
+- Terminology: "use case" instead of "automation"
