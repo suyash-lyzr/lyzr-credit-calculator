@@ -1,18 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArchitectureDiagram } from "./architecture-diagram";
 import { CreditCalculation } from "./credit-calculation";
 import { ROICalculation } from "./roi-calculation";
 import { ArtifactState } from "@/lib/types";
+import { IconBrain, IconCalculator, IconChartBar, IconLoader2 } from "@tabler/icons-react";
 
 interface ArtifactPanelProps {
   artifactState: ArtifactState;
 }
 
 export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
+  const [activeTab, setActiveTab] = React.useState("architecture");
+
   const hasAnyData =
     artifactState.architecture ||
     artifactState.credits ||
@@ -21,8 +23,39 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
     artifactState.isLoading.credits ||
     artifactState.isLoading.roi;
 
+  React.useEffect(() => {
+    if (artifactState.isLoading.architecture || artifactState.architecture) {
+      setActiveTab("architecture");
+    }
+    if (artifactState.isLoading.credits || artifactState.credits) {
+      setActiveTab("credits");
+    }
+    if (artifactState.isLoading.roi || artifactState.roi) {
+      setActiveTab("roi");
+    }
+  }, [artifactState.isLoading.architecture, artifactState.isLoading.credits, artifactState.isLoading.roi, artifactState.architecture, artifactState.credits, artifactState.roi]);
+
+  const getTabIcon = (tab: string, isLoading: boolean, hasData: boolean) => {
+    if (isLoading) {
+      return <IconLoader2 className="h-4 w-4 animate-spin" />;
+    }
+    
+    const iconClass = `h-4 w-4 ${hasData ? 'text-green-600' : 'text-muted-foreground'}`;
+    
+    switch (tab) {
+      case "architecture":
+        return <IconBrain className={iconClass} />;
+      case "credits":
+        return <IconCalculator className={iconClass} />;
+      case "roi":
+        return <IconChartBar className={iconClass} />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col bg-muted/30 rounded-xl border">
+    <div className="flex h-full flex-col bg-muted/30 rounded-xl border overflow-hidden">
       {!hasAnyData ? (
         <div className="flex h-full items-center justify-center p-8">
           <div className="text-center">
@@ -48,28 +81,56 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           </div>
         </div>
       ) : (
-        <div className="flex h-full flex-col p-2 gap-2">
-          <div className="flex-1 min-h-0">
-            <ArchitectureDiagram
-              data={artifactState.architecture}
-              isLoading={artifactState.isLoading.architecture}
-            />
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
+          <div className="border-b px-4 pt-2">
+            <TabsList className="w-full justify-start gap-1 bg-transparent p-0">
+              <TabsTrigger 
+                value="architecture" 
+                className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-lg rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary"
+              >
+                {getTabIcon("architecture", artifactState.isLoading.architecture, !!artifactState.architecture)}
+                <span>Architecture</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="credits"
+                className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-lg rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary"
+              >
+                {getTabIcon("credits", artifactState.isLoading.credits, !!artifactState.credits)}
+                <span>Credits</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="roi"
+                className="flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-t-lg rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary"
+              >
+                {getTabIcon("roi", artifactState.isLoading.roi, !!artifactState.roi)}
+                <span>ROI</span>
+              </TabsTrigger>
+            </TabsList>
           </div>
-          <Separator />
-          <div className="flex-1 min-h-0">
-            <CreditCalculation
-              data={artifactState.credits}
-              isLoading={artifactState.isLoading.credits}
-            />
+          
+          <div className="flex-1 overflow-auto p-4">
+            <TabsContent value="architecture" className="mt-0 h-full">
+              <ArchitectureDiagram
+                data={artifactState.architecture}
+                isLoading={artifactState.isLoading.architecture}
+              />
+            </TabsContent>
+            
+            <TabsContent value="credits" className="mt-0 h-full">
+              <CreditCalculation
+                data={artifactState.credits}
+                isLoading={artifactState.isLoading.credits}
+              />
+            </TabsContent>
+            
+            <TabsContent value="roi" className="mt-0 h-full">
+              <ROICalculation
+                data={artifactState.roi}
+                isLoading={artifactState.isLoading.roi}
+              />
+            </TabsContent>
           </div>
-          <Separator />
-          <div className="flex-1 min-h-0">
-            <ROICalculation
-              data={artifactState.roi}
-              isLoading={artifactState.isLoading.roi}
-            />
-          </div>
-        </div>
+        </Tabs>
       )}
     </div>
   );

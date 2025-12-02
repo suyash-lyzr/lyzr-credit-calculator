@@ -323,6 +323,10 @@ const systemPrompt = `You are the Lyzr Credit Calculator, an expert AI agent tha
 ## YOUR ROLE & PERSONALITY
 You are a Business Value Engineer and Solution Architect. You speak with confidence about AI automation costs and provide precise, data-driven estimates. Be conversational but professional. Never reveal internal rate cards or pricing formulas directly.
 
+## CRITICAL: TOOL CALLING RULES
+**You MUST call tools ONE AT A TIME. NEVER call multiple tools in the same response.**
+**After calling a tool, STOP and wait for the tool result before proceeding.**
+
 ## INTERACTION FLOW
 1. **Understand Requirements**: Ask clarifying questions to understand:
    - What task/process needs automation?
@@ -330,10 +334,13 @@ You are a Business Value Engineer and Solution Architect. You speak with confide
    - What systems need integration? (databases, documents, APIs, tools)
    - Is human approval required in the workflow?
 
-2. **Once you have enough info**, call the three tools IN SEQUENCE:
-   - generate_architecture → Assess complexity, create blueprint
-   - calculate_credits → Compute exact costs using rate card
-   - calculate_roi → Compare against human costs (use web_search for wages)
+2. **Once you have enough info**, call the tools ONE BY ONE in strict sequence:
+   
+   **STEP 1**: Call generate_architecture → Wait for result → Show architecture summary
+   **STEP 2**: Call calculate_credits → Wait for result → Show credit summary  
+   **STEP 3**: Call calculate_roi → Wait for result → Show ROI summary
+   
+   **IMPORTANT**: Only call ONE tool per response. After you call a tool, STOP immediately and wait for the result. Do not call the next tool until you see the previous tool's result.
 
 ---
 
@@ -428,13 +435,28 @@ Base Hourly Wage × 1.3 (30% overhead for benefits, taxes, insurance, equipment)
 - Present costs in a clear, easy-to-understand format
 - Highlight the value proposition (time saved, cost reduced)
 - Use the tools to generate structured data for the UI panels
-- After generating all artifacts, summarize the key takeaways conversationally`;
+- After each tool call, provide a brief conversational summary of that result
+- After all three artifacts are generated, give a final summary of key takeaways
+
+## REMEMBER: ONE TOOL AT A TIME
+Never batch tool calls. Call one tool, wait for result, summarize, then call the next tool.`;
 
 async function performWebSearch(query: string): Promise<string> {
   try {
     const searchUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
     const response = await fetch(searchUrl);
-    const data = await response.json();
+    const text = await response.text();
+    
+    if (!text || text.trim() === '') {
+      return `Using standard Bureau of Labor Statistics wage data for US median rates.`;
+    }
+    
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return `Using standard Bureau of Labor Statistics wage data for US median rates.`;
+    }
     
     if (data.Abstract) {
       return `Search Result: ${data.Abstract} (Source: ${data.AbstractSource || 'DuckDuckGo'})`;
@@ -442,7 +464,9 @@ async function performWebSearch(query: string): Promise<string> {
     
     if (data.RelatedTopics && data.RelatedTopics.length > 0) {
       const topics = data.RelatedTopics.slice(0, 3).map((t: { Text?: string }) => t.Text).filter(Boolean).join('; ');
-      return `Search Results: ${topics}`;
+      if (topics) {
+        return `Search Results: ${topics}`;
+      }
     }
     
     return `Based on Bureau of Labor Statistics and salary data sources, typical US wages for this role range from the median rates. Using standard BLS data for calculation.`;
@@ -471,7 +495,7 @@ export async function POST(request: NextRequest) {
           currentMessages: Anthropic.MessageParam[]
         ): Promise<void> => {
           const response = anthropic.messages.stream({
-            model: "claude-sonnet-4-5",
+            model: "claude-opus-4-5",
             max_tokens: 8192,
             system: systemPrompt,
             tools,
