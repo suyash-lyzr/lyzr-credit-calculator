@@ -91,7 +91,18 @@ export function ChatInterface({
     return (
       <div className="space-y-3">
         {textContent && (
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2 prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-code:break-all [&_pre]:max-w-full [&_code]:break-words">
+          <div className="prose prose-sm dark:prose-invert max-w-none 
+            prose-p:my-2 prose-p:leading-relaxed
+            prose-headings:my-3 prose-headings:font-semibold
+            prose-ul:my-2 prose-ul:pl-5 prose-ul:list-disc
+            prose-ol:my-2 prose-ol:pl-5 prose-ol:list-decimal
+            prose-li:my-1 prose-li:leading-relaxed
+            prose-strong:font-semibold prose-strong:text-foreground
+            prose-table:my-3 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2
+            prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:bg-muted prose-pre:rounded-lg prose-pre:p-3
+            prose-code:break-all prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+            [&_pre]:max-w-full [&_code]:break-words
+            [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {textContent}
             </ReactMarkdown>
@@ -209,7 +220,18 @@ export function ChatInterface({
                     </div>
                   </div>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2 prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-code:break-all [&_pre]:max-w-full [&_code]:break-words">
+                  <div className="prose prose-sm dark:prose-invert max-w-none 
+                    prose-p:my-2 prose-p:leading-relaxed
+                    prose-headings:my-3 prose-headings:font-semibold
+                    prose-ul:my-2 prose-ul:pl-5 prose-ul:list-disc
+                    prose-ol:my-2 prose-ol:pl-5 prose-ol:list-decimal
+                    prose-li:my-1 prose-li:leading-relaxed
+                    prose-strong:font-semibold prose-strong:text-foreground
+                    prose-table:my-3 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2
+                    prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-pre:bg-muted prose-pre:rounded-lg prose-pre:p-3
+                    prose-code:break-all prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+                    [&_pre]:max-w-full [&_code]:break-words
+                    [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {removeQuestionnaireJson(streamingContent)}
                     </ReactMarkdown>

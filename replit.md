@@ -124,6 +124,12 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** UI & Prompt Improvements
+  - Increased Mermaid canvas height (280px/40vh) for better diagram visibility
+  - Removed redundant header from architecture panel (no more "Orchestrator | 3 Agents • KB • 2 Tools MEDIUM")
+  - Added instruction: never output Architecture Overview or Mermaid code in chat messages
+  - Enhanced markdown styling with better spacing, line-height, and table/code formatting
+
 - **2025-12-02:** Critical Bug Fixes & UI Improvements
   - Set temperature to 0.3 for deterministic AI behavior
   - Fixed questionnaire re-appearing after user submits selections (added hasArtifacts guard + prompt instructions)

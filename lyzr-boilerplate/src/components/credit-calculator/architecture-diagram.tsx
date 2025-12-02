@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { IconLoader2, IconZoomIn, IconZoomOut, IconFocus2 } from "@tabler/icons-react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArchitectureData } from "@/lib/types";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
@@ -13,12 +12,6 @@ interface ArchitectureDiagramProps {
   data: ArchitectureData | null;
   isLoading: boolean;
 }
-
-const complexityColors = {
-  LOW: "bg-green-100 text-green-700 border-green-300",
-  MEDIUM: "bg-yellow-100 text-yellow-700 border-yellow-300",
-  HIGH: "bg-red-100 text-red-700 border-red-300",
-};
 
 export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -76,22 +69,6 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
 
   return (
     <Card className="flex flex-col h-full overflow-hidden border-0 shadow-none bg-transparent">
-      {data && (
-        <CardHeader className="py-1 px-1 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-2 text-sm text-muted-foreground">
-              <span>{data.architecture_pattern}</span>
-              <span>|</span>
-              <span>{data.architecture_counts.n_agents} Agents</span>
-              {data.architecture_counts.n_kb > 0 && <span>• KB</span>}
-              {data.architecture_counts.n_tools > 0 && <span>• {data.architecture_counts.n_tools} Tools</span>}
-            </div>
-            <Badge variant="outline" className={`text-xs ${complexityColors[data.complexity_profile]}`}>
-              {data.complexity_profile}
-            </Badge>
-          </div>
-        </CardHeader>
-      )}
       <CardContent className="p-1 flex-1 overflow-hidden">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">

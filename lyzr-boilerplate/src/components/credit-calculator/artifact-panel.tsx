@@ -109,7 +109,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
                 isLoading={artifactState.isLoading.architecture}
                 isComplete={!!artifactState.architecture}
               />
-              <div className="h-[200px] max-h-[33vh]">
+              <div className="h-[280px] max-h-[40vh]">
                 {artifactState.isLoading.architecture && !artifactState.architecture ? (
                   <LoadingPlaceholder message="Analyzing requirements and designing architecture..." />
                 ) : (
