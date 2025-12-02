@@ -556,23 +556,29 @@ export async function POST(request: NextRequest) {
                   currentToolInput += delta.partial_json;
                 }
               } else if (event.type === "content_block_start") {
-                if (event.content_block.type === "tool_use" && !toolUseBlock) {
-                  isProcessingTool = true;
-                  sendEvent("tool_start", { tool: event.content_block.name });
-                  toolUseBlock = {
-                    type: "tool_use",
-                    id: event.content_block.id,
-                    name: event.content_block.name,
-                    input: {},
-                  };
-                  currentToolInput = "";
+                if (event.content_block.type === "tool_use") {
+                  if (!toolUseBlock) {
+                    isProcessingTool = true;
+                    console.log(`[SSE] Sending tool_start for: ${event.content_block.name}`);
+                    sendEvent("tool_start", { tool: event.content_block.name });
+                    toolUseBlock = {
+                      type: "tool_use",
+                      id: event.content_block.id,
+                      name: event.content_block.name,
+                      input: {},
+                    };
+                    currentToolInput = "";
+                  } else {
+                    console.log(`[SSE] Ignoring additional tool: ${event.content_block.name} (already processing ${toolUseBlock.name})`);
+                  }
                 }
               } else if (event.type === "content_block_stop") {
                 if (toolUseBlock && currentToolInput && isProcessingTool) {
                   try {
                     toolUseBlock.input = JSON.parse(currentToolInput);
-                  } catch {
-                    console.error("Failed to parse tool input");
+                    console.log(`[SSE] Parsed tool input for: ${toolUseBlock.name}`);
+                  } catch (e) {
+                    console.error("Failed to parse tool input:", e);
                   }
                   isProcessingTool = false;
                 }
@@ -581,7 +587,22 @@ export async function POST(request: NextRequest) {
 
             const finalMessage = await response.finalMessage();
 
+            console.log(`[SSE] Iteration ${iteration} complete. stop_reason: ${finalMessage.stop_reason}, has toolUseBlock: ${!!toolUseBlock}`);
+            
             if (finalMessage.stop_reason === "end_turn" || !toolUseBlock) {
+              console.log(`[SSE] Ending loop - no more tools to call`);
+              sendEvent("done", {});
+              return;
+            }
+
+            const toolInput = toolUseBlock.input as Record<string, unknown>;
+            const hasValidInput = toolInput && Object.keys(toolInput).length > 0;
+            
+            console.log(`[SSE] Tool: ${toolUseBlock.name}, hasValidInput: ${hasValidInput}, keys: ${Object.keys(toolInput || {})}`);
+
+            if (!hasValidInput) {
+              console.error(`[SSE] ERROR: Tool ${toolUseBlock.name} has no valid input!`);
+              sendEvent("error", { message: `Tool ${toolUseBlock.name} failed to parse input` });
               sendEvent("done", {});
               return;
             }
@@ -589,16 +610,18 @@ export async function POST(request: NextRequest) {
             let toolResultContent: string;
             
             if (toolUseBlock.name === "web_search") {
-              const searchQuery = (toolUseBlock.input as { query: string }).query;
+              const searchQuery = (toolInput as { query: string }).query;
               toolResultContent = await performWebSearch(searchQuery);
+              console.log(`[SSE] Sending tool_result for web_search`);
               sendEvent("tool_result", { 
                 tool: toolUseBlock.name, 
                 data: { query: searchQuery, result: toolResultContent } 
               });
             } else {
+              console.log(`[SSE] Sending tool_result for ${toolUseBlock.name}`);
               sendEvent("tool_result", { 
                 tool: toolUseBlock.name, 
-                data: toolUseBlock.input 
+                data: toolInput 
               });
               toolResultContent = JSON.stringify({ 
                 success: true, 

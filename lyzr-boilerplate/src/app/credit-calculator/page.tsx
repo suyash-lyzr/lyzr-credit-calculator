@@ -150,6 +150,8 @@ export default function CreditCalculatorPage() {
       let buffer = "";
 
       const processEvent = (eventData: { event: string; data: unknown }) => {
+        console.log(`[FE] Received event: ${eventData.event}`, eventData.data);
+        
         switch (eventData.event) {
           case "text":
             accumulatedContent += (eventData.data as { content: string }).content;
@@ -158,6 +160,7 @@ export default function CreditCalculatorPage() {
 
           case "tool_start":
             const toolName = (eventData.data as { tool: string }).tool;
+            console.log(`[FE] tool_start: ${toolName}`);
             if (toolName === "generate_architecture") {
               setArtifactState((prev) => ({
                 ...prev,
@@ -178,19 +181,23 @@ export default function CreditCalculatorPage() {
 
           case "tool_result":
             const toolResult = eventData.data as { tool: string; data: unknown };
+            console.log(`[FE] tool_result: ${toolResult.tool}`, Object.keys(toolResult.data as object || {}));
             if (toolResult.tool === "generate_architecture") {
+              console.log(`[FE] Setting architecture data`);
               setArtifactState((prev) => ({
                 ...prev,
                 architecture: toolResult.data as ArchitectureData,
                 isLoading: { ...prev.isLoading, architecture: false },
               }));
             } else if (toolResult.tool === "calculate_credits") {
+              console.log(`[FE] Setting credits data`);
               setArtifactState((prev) => ({
                 ...prev,
                 credits: toolResult.data as CreditCalculation,
                 isLoading: { ...prev.isLoading, credits: false },
               }));
             } else if (toolResult.tool === "calculate_roi") {
+              console.log(`[FE] Setting ROI data`);
               setArtifactState((prev) => ({
                 ...prev,
                 roi: toolResult.data as ROICalculation,
