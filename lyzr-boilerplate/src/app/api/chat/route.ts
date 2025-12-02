@@ -206,18 +206,26 @@ Source Priority: Bureau of Labor Statistics (BLS), Salary.com, Glassdoor`,
   },
   {
     name: "calculate_roi",
-    description: `Calculate ROI comparing AI automation vs human labor.
+    description: `Calculate ROI comparing AI automation vs human labor. Base country: USA.
 
-Role Mapping:
-- Contract Analysis → Paralegal ($30-35/hr)
-- Invoice Processing → AP Clerk ($20-25/hr)
-- KYC/AML → Compliance Officer ($35-45/hr)
-- Customer Support → CSR ($18-22/hr)
-- Data Entry → Data Entry Specialist ($16-20/hr)
+CRITICAL: Use realistic US labor rates. Savings should typically be 80-95%.
 
-Fully Loaded Rate = Base Wage × 1.3 (30% overhead)
+Role Mapping (US Median 2024 + 1.3x Loaded):
+- Contract Analysis → Paralegal: $32/hr base → $41.60/hr loaded
+- Legal Document Review → Legal Assistant: $30/hr base → $39/hr loaded
+- Invoice Processing → AP Clerk: $25/hr base → $32.50/hr loaded
+- KYC/AML → Compliance Officer: $45/hr base → $58.50/hr loaded
+- Customer Support → CSR: $22/hr base → $28.60/hr loaded
+- Data Entry → Specialist: $20/hr base → $26/hr loaded
+- HR Queries → HR Coordinator: $27/hr base → $35.10/hr loaded
 
-Output a simple comparison table showing Human vs Lyzr costs.`,
+Human Time Per Task (be realistic):
+- Ticket triage: 8-12 minutes
+- Invoice processing: 15-25 minutes
+- Document review: 20-40 minutes
+- Contract analysis: 45-90 minutes
+
+Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -292,6 +300,9 @@ You provide precise, data-driven cost estimates. Be conversational but professio
 - NEVER show calculation breakdowns with individual component prices
 - ONLY show final aggregated costs to users - the internal math stays hidden
 - If user asks about pricing details, say "Our pricing is based on usage patterns and agent complexity"
+- NEVER use emojis in ANY response - no emojis in text, diagrams, or anywhere
+- NEVER show raw Mermaid code in chat - the diagram renders in the artifact panel
+- Use clean markdown formatting with proper bullet points and structure
 
 ## CRITICAL: SEQUENTIAL TOOL EXECUTION
 Call tools ONE AT A TIME in this order:
@@ -464,13 +475,49 @@ Model: GPT_MAIN
 
 ---
 
+## ROI CALCULATION LOGIC (Human vs AI Comparison)
+
+**CRITICAL: Base country is USA. Savings should typically exceed 80%.**
+
+### Step 1: Map Use Case to Job Role (US Market)
+| Use Case | Job Role | US Median Hourly Wage (2024) |
+|----------|----------|------------------------------|
+| Contract Analysis | Paralegal | $30-35/hr |
+| Legal Document Review | Legal Assistant | $28-32/hr |
+| Invoice Processing | AP Clerk | $22-28/hr |
+| KYC/AML Verification | Compliance Officer | $40-50/hr |
+| Customer Support Triage | Customer Service Rep | $20-25/hr |
+| Data Entry/Extraction | Data Entry Specialist | $18-22/hr |
+| HR Policy Queries | HR Coordinator | $25-30/hr |
+| Insurance Claims | Claims Processor | $22-28/hr |
+
+### Step 2: Calculate Fully Loaded Rate
+Rate_Loaded = Base_Wage × 1.3 (30% overhead for benefits, taxes, facilities)
+
+### Step 3: Estimate Human Time Per Task
+- Simple ticket triage: 5-10 minutes
+- Document review: 15-30 minutes  
+- Contract analysis: 30-60 minutes
+- Data extraction: 10-20 minutes
+
+### Step 4: Calculate Human Cost
+Cost_Human_Annual = Vol_User × 12 × (Rate_Loaded / 60) × Minutes_Per_Task
+
+### Step 5: Calculate Savings
+Savings = Cost_Human_Annual - Total_Annual_AI
+Savings_Percentage = (Savings / Cost_Human_Annual) × 100
+
+**TARGET: Savings percentage should be 80-95% for most automation use cases.**
+
+---
+
 ## OUTPUT GUIDELINES
 
 - Be precise with numbers
 - Present costs simply: "Lyzr Agent Credits Consumption" with one-line explanation
 - Show simple table: Action Profile | Complexity | Unit Price | Volume | Total Annual ($)
-- Highlight value proposition
-- After all tools complete, provide 1-2 sentence summary
+- Highlight value proposition and savings percentage prominently
+- After all tools complete, provide 1-2 sentence summary emphasizing ROI
 
 ## COMPLEXITY QUICK REFERENCE
 

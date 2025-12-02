@@ -89,7 +89,7 @@ export function ChatInterface({
     return (
       <div className="space-y-3">
         {textContent && (
-          <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2 prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-code:break-all [&_pre]:max-w-full [&_code]:break-words">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {textContent}
             </ReactMarkdown>
@@ -159,13 +159,15 @@ export function ChatInterface({
               )}
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-2",
+                  "max-w-[85%] rounded-2xl px-4 py-2 overflow-hidden",
                   message.role === "user"
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted"
                 )}
               >
-                {renderMessageContent(message, index === lastAssistantMessageIndex)}
+                <div className="overflow-x-auto break-words">
+                  {renderMessageContent(message, index === lastAssistantMessageIndex)}
+                </div>
               </div>
               {message.role === "user" && (
                 <Avatar className="h-8 w-8 shrink-0">
@@ -205,7 +207,7 @@ export function ChatInterface({
                     </div>
                   </div>
                 ) : (
-                  <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2">
+                  <div className="prose prose-sm dark:prose-invert max-w-none prose-ul:list-disc prose-ol:list-decimal prose-ul:pl-4 prose-ol:pl-4 prose-li:my-1 prose-p:my-2 prose-headings:my-2 prose-pre:overflow-x-auto prose-pre:whitespace-pre-wrap prose-code:break-all [&_pre]:max-w-full [&_code]:break-words">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {removeQuestionnaireJson(streamingContent)}
                     </ReactMarkdown>
