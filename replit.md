@@ -108,6 +108,12 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-02:** Interactive Questionnaire UI
+  - Added interactive questionnaire component with checkboxes and radio buttons
+  - AI now asks only 2-3 focused questions with predefined options
+  - User selects options and clicks "Calculate Credits & ROI" to submit
+  - Questions auto-detected from AI response JSON and rendered as interactive UI
+
 - **2025-12-02:** Claude Opus 4.5 & Interactive Canvas
   - Upgraded to Claude Opus 4.5 (claude-opus-4-5) - most intelligent model
   - Enforced sequential tool calling (one tool at a time, wait for result)
