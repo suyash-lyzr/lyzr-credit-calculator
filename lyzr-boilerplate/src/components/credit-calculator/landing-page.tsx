@@ -35,7 +35,7 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
           />
           <h1 className="text-3xl font-bold mb-2">Credit Calculator</h1>
           <p className="text-muted-foreground text-lg">
-            Describe your use case and I&apos;ll calculate the credits and ROI
+            Describe your use case and I&apos;ll help you estimate the credits &amp; ROI :)
           </p>
         </div>
         
@@ -76,7 +76,7 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
           />
         </div>
 
-        <p className="mt-8 text-center text-sm text-muted-foreground/70 italic">
+        <p className="mt-12 text-center text-sm text-muted-foreground/70 italic">
           Lyzr follows a transparent pricing model where customers pay only for Agent Actions, not the underlying LLM or compute cost.
         </p>
       </div>
