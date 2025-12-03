@@ -19,26 +19,31 @@ interface SectionHeaderProps {
   isComplete: boolean;
 }
 
-function SectionHeader({ icon, title, stepNumber, isLoading, isComplete }: SectionHeaderProps) {
+function SectionHeader({ icon, title, stepNumber, isLoading, isComplete, badge }: SectionHeaderProps & { badge?: string }) {
   return (
-    <div className="flex items-center gap-2 mb-2">
-      <div className={`flex items-center justify-center w-6 h-6 rounded-full ${
-        isComplete ? 'bg-green-100 text-green-600' : 
-        isLoading ? 'bg-primary/10 text-primary' : 
-        'bg-muted text-muted-foreground'
-      }`}>
-        {isLoading ? (
-          <IconLoader2 className="h-3 w-3 animate-spin" />
-        ) : isComplete ? (
-          <IconCheck className="h-3 w-3" />
-        ) : (
-          <span className="text-xs font-medium">{stepNumber}</span>
-        )}
+    <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center gap-2">
+        <div className={`flex items-center justify-center w-6 h-6 rounded-full ${
+          isComplete ? 'bg-green-100 text-green-600' : 
+          isLoading ? 'bg-primary/10 text-primary' : 
+          'bg-muted text-muted-foreground'
+        }`}>
+          {isLoading ? (
+            <IconLoader2 className="h-3 w-3 animate-spin" />
+          ) : isComplete ? (
+            <IconCheck className="h-3 w-3" />
+          ) : (
+            <span className="text-xs font-medium">{stepNumber}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {icon}
+          <h3 className="font-semibold text-base">{title}</h3>
+        </div>
       </div>
-      <div className="flex items-center gap-1.5">
-        {icon}
-        <h3 className="font-semibold text-base">{title}</h3>
-      </div>
+      {badge && (
+        <span className="text-xs text-muted-foreground italic">{badge}</span>
+      )}
     </div>
   );
 }
@@ -108,6 +113,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
                 stepNumber={1}
                 isLoading={artifactState.isLoading.architecture}
                 isComplete={!!artifactState.architecture}
+                badge="Powered by Lyzr's Architect"
               />
               <div className="h-[320px] max-h-[45vh]">
                 {artifactState.isLoading.architecture && !artifactState.architecture ? (

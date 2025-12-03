@@ -44,12 +44,12 @@ export function ChatSidebar({
           <Image
             src={LYZR_LOGO}
             alt="Lyzr"
-            width={48}
-            height={48}
+            width={56}
+            height={56}
             className="object-contain"
             unoptimized
           />
-          <span className="text-lg font-semibold">Credit Calculator</span>
+          <span className="text-base font-semibold">Credit Calculator</span>
         </div>
         <Button onClick={onNewSession} className="mt-4 w-full" size="sm">
           <IconPlus className="mr-2 h-4 w-4" />
