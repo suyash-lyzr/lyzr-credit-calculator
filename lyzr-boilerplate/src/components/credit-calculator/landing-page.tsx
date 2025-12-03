@@ -76,7 +76,7 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
           />
         </div>
 
-        <p className="mt-12 text-center text-[15px] text-muted-foreground italic">
+        <p className="mt-12 text-center text-[18px] text-muted-foreground italic">
           Lyzr follows a transparent pricing model where customers pay only for Agent Actions, not the underlying LLM or compute cost.
         </p>
       </div>

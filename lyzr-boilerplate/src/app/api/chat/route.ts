@@ -106,6 +106,8 @@ C. MODEL COSTS (with 25% handling markup):
 | GPT_MINI | $0.25/$2.00 per 1M tokens | Standard Agents |
 | GPT_MAIN | $1.25/$10.00 per 1M tokens | Orchestrators/Complex |
 
+CRUCIAL : If user mentions backlog/one-time volume, do NOT annualize or buffer it. Only use stated volume. - OR MAYBE ASK THIS IN FOLLOW UP IF CONFUSION.
+
 === CALCULATION FORMULAS (Apply in exact order) ===
 
 Vol_User = MONTHLY volume stated by user
