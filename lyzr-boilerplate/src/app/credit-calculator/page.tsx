@@ -15,12 +15,19 @@ import {
   ROICalculation,
 } from "@/lib/types";
 
+let idCounter = 0;
 function generateId() {
-  return Math.random().toString(36).substring(2, 15);
+  idCounter += 1;
+  return `id-${idCounter}-${Date.now()}`;
 }
 
 export default function CreditCalculatorPage() {
+  const [isClient, setIsClient] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSession[]>([]);
+
+  React.useEffect(() => {
+    setIsClient(true);
+  }, []);
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [streamingContent, setStreamingContent] = React.useState("");
@@ -150,7 +157,7 @@ export default function CreditCalculatorPage() {
       let buffer = "";
 
       const processEvent = (eventData: { event: string; data: unknown }) => {
-        console.log(`[FE] Received event: ${eventData.event}`, eventData.data);
+        console.log(`[FE] Received event: ${eventData.event} at ${new Date().toISOString()}`, eventData.data);
         
         switch (eventData.event) {
           case "text":
@@ -226,11 +233,17 @@ export default function CreditCalculatorPage() {
 
         const decoder = new TextDecoder();
 
+        console.log("[FE] Starting stream read...");
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            console.log("[FE] Stream done");
+            break;
+          }
 
-          buffer += decoder.decode(value, { stream: true });
+          const chunk = decoder.decode(value, { stream: true });
+          console.log(`[FE] Received chunk (${chunk.length} chars)`);
+          buffer += chunk;
           
           const lines = buffer.split("\n\n");
           buffer = lines.pop() || "";

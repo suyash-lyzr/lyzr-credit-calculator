@@ -1,6 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -632,9 +635,9 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         const sendEvent = (event: string, data: unknown) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ event, data })}\n\n`)
-          );
+          const payload = `data: ${JSON.stringify({ event, data })}\n\n`;
+          controller.enqueue(encoder.encode(payload));
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
         };
 
         const runConversationLoop = async (

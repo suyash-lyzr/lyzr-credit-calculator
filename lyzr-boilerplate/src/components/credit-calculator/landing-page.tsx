@@ -3,7 +3,6 @@
 import * as React from "react";
 import { IconSend, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import Image from "next/image";
 
 interface LandingPageProps {
@@ -13,6 +12,7 @@ interface LandingPageProps {
 
 export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
   const [input, setInput] = React.useState("");
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,6 +20,26 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
       onSubmit(input.trim());
     }
   };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "56px";
+      const scrollHeight = textarea.scrollHeight;
+      textarea.style.height = Math.min(Math.max(56, scrollHeight), 200) + "px";
+    }
+  };
+
+  React.useEffect(() => {
+    adjustTextareaHeight();
+  }, [input]);
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
@@ -40,18 +60,21 @@ export function LandingPage({ onSubmit, isLoading }: LandingPageProps) {
         </div>
         
         <form onSubmit={handleSubmit} className="relative">
-          <Input
+          <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Describe your use case..."
             disabled={isLoading}
-            className="w-full h-14 pr-14 text-lg rounded-xl border-2 focus:border-primary"
+            rows={1}
+            className="w-full min-h-[56px] max-h-[200px] py-4 px-4 pr-14 text-lg rounded-xl border-2 border-input bg-background focus:border-primary focus:outline-none focus:ring-0 resize-none overflow-hidden"
           />
           <Button 
             type="submit" 
             disabled={!input.trim() || isLoading} 
             size="icon"
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-10 w-10 rounded-lg"
+            className="absolute right-2 top-4 h-10 w-10 rounded-lg"
           >
             {isLoading ? (
               <IconLoader2 className="h-5 w-5 animate-spin" />
