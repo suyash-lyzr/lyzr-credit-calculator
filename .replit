@@ -36,5 +36,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd lyzr-boilerplate && npm start -- -p 5000 -H 0.0.0.0"]
-build = ["bash", "-c", "cd lyzr-boilerplate && npm install && npm run build"]
+run = ["bash", "-c", "npm start --prefix lyzr-boilerplate -- -p 5000 -H 0.0.0.0"]
+build = ["bash", "-c", "npm install --prefix lyzr-boilerplate && npm run build --prefix lyzr-boilerplate"]
