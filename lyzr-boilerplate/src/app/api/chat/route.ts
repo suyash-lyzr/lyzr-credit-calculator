@@ -468,21 +468,17 @@ N_Runs (Total Inferences):
 Cost_Fixed = (N_Agents × 0.05) + (N_KB × 1.00) + (N_RAI × 1.00) + (N_Tools × 0.10)
 
 **B. Infrastructure (LLM) Cost Per Inference:**
-**CRITICAL: Token estimation must be adjusted based on use case characteristics:**
+**CRITICAL: Intelligently estimate tokens based on use case analysis and questionnaire responses:**
 
-Base estimates (standard chat/simple processing):
-- 2000 input, 500 output tokens
+Token estimation must dynamically adapt to:
+1. **Use case domain**: Legal/contract documents are longer than invoices or tickets
+2. **Volume indicators**: Backlog size and ongoing frequency suggest document complexity
+3. **Data sources mentioned**: PDFs/Documents imply larger token counts than database records
+4. **Workflow type**: Conversational requires context history, transactional is stateless
+5. **Output requirements**: Knowledge graph storage, gap analysis, or summaries increase output tokens
+6. **Questionnaire selections**: Volume, integrations, and workflow type directly inform token ranges
 
-Adjust based on use case:
-- **Document Processing (PDFs, Contracts):** Estimate based on document length
-  - 10-page doc ≈ 5,000-7,000 tokens
-  - 50-page doc ≈ 25,000-35,000 tokens
-  - 100-page doc ≈ 50,000-70,000 tokens
-- **Conversational (Chat-based):** Use 2,000-3,000 input (context window) + 500-1,000 output
-- **Data Extraction/Structured Output:** 2,000-4,000 input + 300-800 output (concise responses)
-- **Complex Analysis/Summaries:** 5,000-10,000 input + 1,500-3,000 output
-
-**If user mentions document size, backlog volume, or conversation length, adjust token estimates accordingly.**
+When calculating, analyze the full context including user's initial description and questionnaire responses to derive appropriate token estimates. Higher volume backlogs with document processing typically indicate substantial page counts. Multi-step workflows with analysis requirements need larger output token allocations.
 
 Cost_Model = [(Tokens_In/1M × Price_In) + (Tokens_Out/1M × Price_Out)] × 1.25
 
