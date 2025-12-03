@@ -105,7 +105,6 @@ Incurred dynamically based on the actions an agent takes during a run.
 | PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
 | PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
 | PRICE_RETRIEVE_MEM | $0.005| Chat History Context |
-| PRICE_BASE_RUN | $0.05 | Base Platform Fee (Add to every step) |
 
 C. MODEL COSTS (with 25% handling markup):
 | Model | Input ($/1M) | Output ($/1M) | Assignment |
@@ -420,7 +419,7 @@ B_Mem (Memory Count):
 - IF Transactional/Process: 0
 
 B_KB (KB Retrieval Count):
-- IF Search/Analysis: 1 (or higher if heavy research)
+- IF Search/Analysis: 1 (or higher if intensive)
 - ELSE: 0
 
 B_RAI (Safety Count):
