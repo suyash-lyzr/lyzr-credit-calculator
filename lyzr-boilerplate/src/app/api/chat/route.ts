@@ -113,77 +113,93 @@ C. MODEL COSTS (with 25% handling markup):
 | GPT_MINI | $0.25 | $2.00 | Standard Agents |
 | GPT_MAIN | $1.25 | $10.00 | Orchestrators/Complex |
 
-CRUCIAL : If user mentions backlog/one-time volume, do NOT annualize or buffer it. Only use stated volume. - OR MAYBE ASK THIS IN FOLLOW UP IF CONFUSION.
+=== VOLUME RULES (CRITICAL) ===
+BACKLOG (one-time): N_Runs_Backlog = backlog_volume (NO buffer, NO annualization)
+ONGOING (monthly): N_Runs_Ongoing = monthly_volume × 12 × 1.20 (with 20% buffer)
+COMBINED: Total = N_Runs_Backlog + N_Runs_Ongoing
 
-=== CALCULATION FORMULAS (Apply in exact order) ===
-
-Vol_User = MONTHLY volume stated by user
-
+=== CALCULATION FORMULAS ===
 STEP 1: Fixed Setup Cost (one-time)
 Cost_Fixed = (N_Agents × 0.05) + (N_KB × 1.00) + (N_RAI × 1.00) + (N_Tools × 0.10)
 
-STEP 2: Model Cost Per Inference (estimate 2000 input, 500 output tokens)
+STEP 2: Model Cost Per Inference
 Cost_Model = [(Tokens_In/1M × Price_In) + (Tokens_Out/1M × Price_Out)] × 1.25
-- LOW → GPT_NANO: (2000/1M × 0.05) + (500/1M × 0.40) × 1.25 = $0.000375
-- MEDIUM → GPT_MINI: (2000/1M × 0.25) + (500/1M × 2.00) × 1.25 = $0.001875
-- HIGH → GPT_MAIN: (2000/1M × 1.25) + (500/1M × 10.00) × 1.25 = $0.009375
+- LOW → GPT_NANO: ~$0.000375
+- MEDIUM → GPT_MINI: ~$0.001875
+- HIGH → GPT_MAIN: ~$0.009375
 
-STEP 3: Variable Cost Per Inference (in USD)
-Cost_Inference = Cost_Model + PRICE_BASE_RUN + (B_Mem × 0.005) + (B_KB × 0.05) + (B_RAI × 0.15) + (B_API × 0.20)
+STEP 3: Variable Cost Per Inference
+Cost_Inference = Cost_Model + 0.05 + (B_Mem × 0.005) + (B_KB × 0.05) + (B_RAI × 0.15) + (B_API × 0.20)
 
-STEP 4: Volume Dynamics (annual)
-- N_Sessions_Monthly: IF Chat = Vol_User/5, IF Transactional = Vol_User
-- N_Sessions_Annual = N_Sessions_Monthly × 12
-- N_Runs_Annual = Vol_User × 12 × 1.20 (add 20% buffer for testing/simulation)
-
-STEP 5: Total Annual Cost
-Total_Annual = Cost_Fixed + (N_Sessions_Annual × 0.05) + (N_Runs_Annual × Cost_Inference)
-
-=== OUTPUT ===
-The "unit_price" field is Cost_Inference in USD (the cost per action).
-The table shows: Action Profile | Complexity | Unit Price | Total Volume | Total Annual ($)`,
+=== MULTIPLE WORKLOADS ===
+When user has BOTH backlog AND ongoing volume, use the "rows" array to show BOTH in a single table.
+Example: 200k backlog + 2k/month ongoing = rows: [{Backlog, 200000, cost1}, {Ongoing, 28800, cost2}]
+Set combined_total = sum of all row costs, combined_note = explanation`,
     input_schema: {
       type: "object" as const,
       properties: {
         agent_architecture_summary: {
           type: "string",
-          description: "Summary of the agent architecture from generate_architecture. Format: '[Pattern]: [Agent1] → [Agent2] → ... with [KB/Tools]. Example: '3-Agent Chain: Ingestion Agent → Extraction Agent → Validation Agent with Knowledge Base and OCR Tool'",
+          description: "Summary of the agent architecture",
         },
         action_profile: {
           type: "string",
-          description: "Name of the agent workflow (e.g., 'Contract Processing Chain', 'HR Policy Bot')",
+          description: "Name of the workflow (used when single workload)",
         },
         complexity: {
           type: "string",
-          description: "Complexity with agent count (e.g., 'High (4-Agent Chain)', 'Low (Single Agent)')",
+          description: "Complexity (e.g., 'High (4-Agent Chain)')",
         },
         unit_price: {
           type: "number",
-          description: "Cost_Inference in USD - the cost per action/inference",
+          description: "Cost per action/inference in USD",
         },
         total_volume: {
           type: "number",
-          description: "N_Runs_Annual = Vol_User_monthly × 12 × 1.20",
+          description: "Total volume (used when single workload)",
         },
         total_annual_cost: {
           type: "number",
-          description: "Total_Annual from formula: Cost_Fixed + (N_Sessions_Annual × 0.05) + (N_Runs_Annual × Cost_Inference)",
+          description: "Total cost (used when single workload)",
+        },
+        rows: {
+          type: "array",
+          description: "REQUIRED when user has multiple workloads (e.g., backlog + ongoing). Each row represents a distinct workload.",
+          items: {
+            type: "object",
+            properties: {
+              action_profile: { type: "string", description: "Workload name (e.g., 'Backlog Migration', 'Ongoing Processing')" },
+              complexity: { type: "string" },
+              unit_price: { type: "number" },
+              total_volume: { type: "number" },
+              total_cost: { type: "number" },
+            },
+            required: ["action_profile", "complexity", "unit_price", "total_volume", "total_cost"],
+          },
+        },
+        combined_total: {
+          type: "number",
+          description: "Sum of all row costs when multiple workloads exist",
+        },
+        combined_note: {
+          type: "string",
+          description: "Explanation of combined total (e.g., 'includes full backlog + first year ongoing')",
         },
         calculation_details: {
           type: "object",
-          description: "Full calculation breakdown for verification",
+          description: "Calculation breakdown for verification",
           properties: {
-            vol_user_monthly: { type: "number", description: "User's stated monthly volume" },
-            n_sessions_annual: { type: "number", description: "Total sessions for the year" },
-            n_runs_annual: { type: "number", description: "Total inferences with 20% buffer" },
-            cost_fixed: { type: "number", description: "One-time setup cost" },
-            cost_model: { type: "number", description: "LLM cost per inference" },
-            cost_inference: { type: "number", description: "Total variable cost per inference" },
-            session_cost_total: { type: "number", description: "N_Sessions_Annual × 0.05" },
-            inference_cost_total: { type: "number", description: "N_Runs_Annual × Cost_Inference" },
+            vol_user_monthly: { type: "number" },
+            n_sessions_annual: { type: "number" },
+            n_runs_annual: { type: "number" },
+            cost_fixed: { type: "number" },
+            cost_model: { type: "number" },
+            cost_inference: { type: "number" },
+            session_cost_total: { type: "number" },
+            inference_cost_total: { type: "number" },
             model_used: { type: "string" },
           },
-          required: ["vol_user_monthly", "n_sessions_annual", "n_runs_annual", "cost_fixed", "cost_model", "cost_inference", "session_cost_total", "inference_cost_total", "model_used"],
+          required: ["cost_fixed", "cost_model", "cost_inference", "model_used"],
         },
       },
       required: [
@@ -478,7 +494,10 @@ Cost_Inference = Cost_Model + 0.05 + (B_Mem × 0.005) + (B_KB × 0.05) + (B_RAI 
 **D. Total Annual Cost:**
 Total_Annual = Cost_Fixed + (N_Sessions × 0.05) + (N_Runs × Cost_Inference)
 
-CRUCIAL : If user mentions backlog/one-time volume, do NOT annualize or buffer it. Only use stated volume. - OR MAYBE ASK THIS IN FOLLOW UP IF CONFUSION.
+CRUCIAL VOLUME RULES:
+- BACKLOG (one-time): N_Runs_Backlog = exact backlog count. NO 20% buffer, NO × 12 annualization.
+- ONGOING (monthly): N_Runs_Ongoing = monthly × 12 × 1.20 (with buffer)
+- COMBINED: When user has BOTH backlog AND ongoing, use the "rows" array in calculate_credits to show BOTH workloads in a single table. Set combined_total = sum of all costs.
 
 2. ARCHITECTURAL SIMULATION LOGIC (The Input Parser)You must simulate the architecture to determine the variables ($N$) used in the formulas.Step 1: Determine Architecture Counts ($N_{Total}$)Derive these counts from the Agent Architecture diagram or description.$N_{Agents}$ (Agent Count):Single Agent: = 1.Orchestrator Pattern: = 1 Manager + $X$ Sub-agents.Multi-Agent Chain: = Total number of agents in the workflow.$N_{KB}$ (Knowledge Bases):Logic: Does the use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No).$N_{RAI}$ (Safety Policies):Logic: Is the domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No).$N_{Tools}$ (Integrations):Logic: Count distinct external integrations (OCR, CRM, Database, Search).Step 2: Assign ModelsOrchestrator/Manager Agents: Assign GPT-5 (High reasoning).Worker/Sub-Agents: Assign GPT-5 Mini (Cost efficient).Simple Chat: Assign GPT-5 Nano.Step 3: Determine Scenario Variables per Inference ($B$ Variables)How many times does EACH action happen in one single run/inference?$B_{Mem}$ (Memory Count):IF Conversational/Chat: = 1 (Context required).IF Transactional/Process: = 0 (Stateless execution).$B_{KB}$ (KB Retrieval Count):IF Search/Analysis: = 1 (or more if intensive).ELSE: 0.$B_{RAI}$ (Safety Count):IF High Complexity/External Output: = 1.ELSE: 0.$B_{API}$ (Action Count):Logic: ONLY count external tool/API calls per run (OCR, Database, Knowledge Graph writes, CRM, etc.).Formula: $N_{Tools\_Called\_Per\_Run}$ (Agent executions are NOT counted here - LLM cost is in Cost_Model)Step 4: Define Volume Dynamics$Vol_{User}$: The volume stated by the user.$N_{Sessions}$:IF Chat: $Vol_{User} / 5$ (5 turns per session).IF Transactional: $Vol_{User}$ (1 doc = 1 session).$N_{Runs}$ (Total Inferences):$Vol_{User} \times 1.20$ (Always add 20% Buffer for Simulation/Testing).3. CALCULATION FORMULAS (The Engine)Apply these formulas strictly in this order.A. Fixed Setup Cost$$Cost_{Fixed} = (N_{Agents} \times 0.05) + (N_{KB} \times 1.00) + (N_{RAI} \times 1.00) + (N_{Tools} \times 0.10)$$B. Infrastructure (LLM) Cost Per InferenceCalculate Weighted Average based on Agents:If Orchestrator (GPT-5) + 2 Workers (Mini):Cost = (1 * Cost_{GPT5}) + (2 * Cost_{Mini})$$Cost_{Model} = [ (\frac{Tokens_{In}}{1M} \times Price_{In}) + (\frac{Tokens_{Out}}{1M} \times Price_{Out}) ] \times 1.25$$C. Variable Lyzr Credit Cost Per InferenceSum of Base Run + Model + Actions.$$Cost_{Inference} = Cost_{Model} + 0.05 + (B_{Mem} \times 0.005) + (B_{KB} \times 0.05) + (B_{RAI} \times 0.15) + (B_{API} \times 0.20)$$D. Total Annual Cost$$Total_{Annual} = Cost_{Fixed} + (N_{Sessions} \times 0.05) + (N_{Runs} \times Cost_{Inference})$$
 
@@ -752,7 +771,9 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-store, must-revalidate",
-        Connection: "keep-alive",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "Transfer-Encoding": "chunked",
       },
     });
   } catch (error) {

@@ -25,7 +25,8 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
     }).format(value);
   };
 
-  const formatNumber = (value: number) => {
+  const formatNumber = (value: number | string) => {
+    if (typeof value === 'string') return value;
     return new Intl.NumberFormat("en-US").format(value);
   };
 
@@ -46,6 +47,8 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
       </div>
     );
   }
+
+  const hasMultipleRows = data.rows && data.rows.length > 0;
 
   return (
     <div className="space-y-4">
@@ -68,24 +71,47 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50">
-              <th className="py-2.5 px-4 text-left font-semibold">Action Profile</th>
+              <th className="py-2.5 px-4 text-left font-semibold">Workload</th>
               <th className="py-2.5 px-4 text-left font-semibold">Complexity</th>
-              <th className="py-2.5 px-4 text-left font-semibold">Unit Price</th>
-              <th className="py-2.5 px-4 text-left font-semibold">Total Volume</th>
-              <th className="py-2.5 px-4 text-left font-semibold">Total Annual<br/>Credits Usage ($)</th>
+              <th className="py-2.5 px-4 text-left font-semibold">Cost/Unit</th>
+              <th className="py-2.5 px-4 text-left font-semibold">Volume</th>
+              <th className="py-2.5 px-4 text-left font-semibold">Total Cost</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="py-3 px-4 font-medium">{data.action_profile}</td>
-              <td className="py-3 px-4">{data.complexity}</td>
-              <td className="py-3 px-4 font-medium">${data.unit_price.toFixed(2)}</td>
-              <td className="py-3 px-4">{formatNumber(data.total_volume)}</td>
-              <td className="py-3 px-4 font-bold text-primary">{formatCurrency(data.total_annual_cost)}</td>
-            </tr>
+            {hasMultipleRows ? (
+              data.rows!.map((row, index) => (
+                <tr key={index} className={index > 0 ? "border-t" : ""}>
+                  <td className="py-3 px-4 font-medium">{row.action_profile}</td>
+                  <td className="py-3 px-4">{row.complexity}</td>
+                  <td className="py-3 px-4 font-medium">${row.unit_price.toFixed(2)}</td>
+                  <td className="py-3 px-4">{formatNumber(row.total_volume)}</td>
+                  <td className="py-3 px-4 font-bold text-primary">{formatCurrency(row.total_cost)}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td className="py-3 px-4 font-medium">{data.action_profile}</td>
+                <td className="py-3 px-4">{data.complexity}</td>
+                <td className="py-3 px-4 font-medium">${data.unit_price.toFixed(2)}</td>
+                <td className="py-3 px-4">{formatNumber(data.total_volume)}</td>
+                <td className="py-3 px-4 font-bold text-primary">{formatCurrency(data.total_annual_cost)}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {hasMultipleRows && data.combined_total && (
+        <div className="bg-primary/5 rounded-lg px-4 py-3 border border-primary/20">
+          <p className="text-sm font-semibold text-foreground">
+            Combined Year 1 Investment: <span className="text-primary">{formatCurrency(data.combined_total)}</span>
+          </p>
+          {data.combined_note && (
+            <p className="text-xs text-muted-foreground mt-1">{data.combined_note}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
