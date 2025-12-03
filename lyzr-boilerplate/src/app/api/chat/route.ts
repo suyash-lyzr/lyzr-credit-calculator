@@ -449,7 +449,22 @@ N_Runs (Total Inferences):
 Cost_Fixed = (N_Agents × 0.05) + (N_KB × 1.00) + (N_RAI × 1.00) + (N_Tools × 0.10)
 
 **B. Infrastructure (LLM) Cost Per Inference:**
-Estimate tokens: 2000 input, 500 output for standard agent
+**CRITICAL: Token estimation must be adjusted based on use case characteristics:**
+
+Base estimates (standard chat/simple processing):
+- 2000 input, 500 output tokens
+
+Adjust based on use case:
+- **Document Processing (PDFs, Contracts):** Estimate based on document length
+  - 10-page doc ≈ 5,000-7,000 tokens
+  - 50-page doc ≈ 25,000-35,000 tokens
+  - 100-page doc ≈ 50,000-70,000 tokens
+- **Conversational (Chat-based):** Use 2,000-3,000 input (context window) + 500-1,000 output
+- **Data Extraction/Structured Output:** 2,000-4,000 input + 300-800 output (concise responses)
+- **Complex Analysis/Summaries:** 5,000-10,000 input + 1,500-3,000 output
+
+**If user mentions document size, backlog volume, or conversation length, adjust token estimates accordingly.**
+
 Cost_Model = [(Tokens_In/1M × Price_In) + (Tokens_Out/1M × Price_Out)] × 1.25
 
 Model Selection:
