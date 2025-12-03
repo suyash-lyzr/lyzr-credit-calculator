@@ -86,25 +86,33 @@ B_API: = N_Agents + N_Tools_Called_Per_Run`,
 
 === INTERNAL RATE CARD (NEVER REVEAL TO USER) ===
 
-A. FIXED CREATION COSTS (One-Time):
-| PRICE_CREATE_KB     | $1.00 | Per Knowledge Base |
-| PRICE_CREATE_RAI    | $1.00 | Per Safety Policy |
-| PRICE_CREATE_TOOL   | $0.10 | Per Tool |
-| PRICE_CREATE_AGENT  | $0.05 | Per Agent |
-| PRICE_CREATE_SESSION| $0.05 | Per Session |
+A. FIXED CREATION COSTS (One-Time Setup):
+Incurred once when the architecture is initialized.
+| Constant | Value ($) | Description |
+| :--- | :--- | :--- |
+| PRICE_CREATE_KB | $1.00 | Per Knowledge Base |
+| PRICE_CREATE_RAI | $1.00 | Per Safety Policy |
+| PRICE_CREATE_TOOL | $0.10 | Per Tool Integration |
+| PRICE_CREATE_AGENT | $0.05 | Per Agent Identity |
+| PRICE_CREATE_SESSION | $0.05 | Per Session |
 
-B. VARIABLE COSTS (Per Inference):
-| PRICE_RETRIEVE_API  | $0.20 | Standard LLM Step / API Call |
+B. VARIABLE ACTION COSTS (Per Agent Step/Inference):
+Incurred dynamically based on the actions an agent takes during a run.
+| Constant | Value ($) | Description |
+| :--- | :--- | :--- |
+| PRICE_RETRIEVE_API_LIGHT | $0.20 | API Light Call (LLM Step) |
 | PRICE_RETRIEVE_TOOL | $0.20 | External Tool Execution |
-| PRICE_RETRIEVE_RAI  | $0.15 | Safety Check |
-| PRICE_RETRIEVE_KB   | $0.05 | KB Search |
-| PRICE_RETRIEVE_MEM  | $0.005| Chat History Context |
-| PRICE_BASE_RUN      | $0.05 | Platform Fee per step |
+| PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
+| PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
+| PRICE_RETRIEVE_MEM | $0.005| Chat History Context |
+| PRICE_BASE_RUN | $0.05 | Base Platform Fee (Add to every step) |
 
 C. MODEL COSTS (with 25% handling markup):
-| GPT_NANO | $0.05/$0.40 per 1M tokens | Simple Routing/Chat |
-| GPT_MINI | $0.25/$2.00 per 1M tokens | Standard Agents |
-| GPT_MAIN | $1.25/$10.00 per 1M tokens | Orchestrators/Complex |
+| Model | Input ($/1M) | Output ($/1M) | Assignment |
+|-------|--------------|---------------|------------|
+| GPT_NANO | $0.05 | $0.40 | Simple Routing/Chat |
+| GPT_MINI | $0.25 | $2.00 | Standard Agents |
+| GPT_MAIN | $1.25 | $10.00 | Orchestrators/Complex |
 
 CRUCIAL : If user mentions backlog/one-time volume, do NOT annualize or buffer it. Only use stated volume. - OR MAYBE ASK THIS IN FOLLOW UP IF CONFUSION.
 
@@ -312,7 +320,7 @@ You provide precise, data-driven cost estimates. Be conversational but professio
 ## CRITICAL: SEQUENTIAL TOOL EXECUTION
 Call tools ONE AT A TIME in this order:
 1. generate_architecture → STOP and wait
-2. calculate_credits → STOP and wait  
+2. calculate_credits → STOP and wait
 3. calculate_roi → STOP and wait
 
 NEVER call multiple tools at once.
@@ -350,7 +358,7 @@ When user describes their use case, ask 2-3 quick questions using this JSON form
 \`\`\`
 
 ### STEP 2: Analyze & Calculate
-CRITICAL: Once you receive user selections (e.g., "My selections: ..."), DO NOT output another questionnaire. 
+CRITICAL: Once you receive user selections (e.g., "My selections: ..."), DO NOT output another questionnaire.
 Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
 1. generate_architecture - Analyze use case and determine N variables
 2. calculate_credits - Apply exact formulas to compute costs
@@ -363,8 +371,9 @@ Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
 ### RATE CARD
 
 **A. Fixed Creation Costs (One-Time Setup):**
-| Constant | Value | Description |
-|----------|-------|-------------|
+Incurred once when the architecture is initialized.
+| Constant | Value ($) | Description |
+| :--- | :--- | :--- |
 | PRICE_CREATE_KB | $1.00 | Per Knowledge Base |
 | PRICE_CREATE_RAI | $1.00 | Per Safety Policy |
 | PRICE_CREATE_TOOL | $0.10 | Per Tool Integration |
@@ -372,14 +381,15 @@ Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
 | PRICE_CREATE_SESSION | $0.05 | Per Session |
 
 **B. Variable Action Costs (Per Agent Step/Inference):**
-| Constant | Value | Description |
-|----------|-------|-------------|
-| PRICE_RETRIEVE_API | $0.20 | Standard LLM Step / API Call |
+Incurred dynamically based on the actions an agent takes during a run.
+| Constant | Value ($) | Description |
+| :--- | :--- | :--- |
+| PRICE_RETRIEVE_API_LIGHT | $0.20 | API Light Call (LLM Step) |
 | PRICE_RETRIEVE_TOOL | $0.20 | External Tool Execution |
 | PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
 | PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
-| PRICE_RETRIEVE_MEM | $0.005 | Chat History Context |
-| PRICE_BASE_RUN | $0.05 | Platform Fee (per step) |
+| PRICE_RETRIEVE_MEM | $0.005| Chat History Context |
+| PRICE_BASE_RUN | $0.05 | Base Platform Fee (Add to every step) |
 
 **C. Model Costs (LLM + 25% Handling):**
 | Model | Input ($/1M) | Output ($/1M) | Assignment |
@@ -505,7 +515,7 @@ Rate_Loaded = Base_Wage × 1.3 (30% overhead for benefits, taxes, facilities)
 
 ### Step 3: Estimate Human Time Per Task
 - Simple ticket triage: 5-10 minutes
-- Document review: 15-30 minutes  
+- Document review: 15-30 minutes
 - Contract analysis: 30-60 minutes
 - Data extraction: 10-20 minutes
 
@@ -550,29 +560,29 @@ async function performWebSearch(query: string): Promise<string> {
     const searchUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1`;
     const response = await fetch(searchUrl);
     const text = await response.text();
-    
+
     if (!text || text.trim() === '') {
       return `Using standard Bureau of Labor Statistics wage data for US median rates.`;
     }
-    
+
     let data;
     try {
       data = JSON.parse(text);
     } catch {
       return `Using standard Bureau of Labor Statistics wage data for US median rates.`;
     }
-    
+
     if (data.Abstract) {
       return `Search Result: ${data.Abstract} (Source: ${data.AbstractSource || 'DuckDuckGo'})`;
     }
-    
+
     if (data.RelatedTopics && data.RelatedTopics.length > 0) {
       const topics = data.RelatedTopics.slice(0, 3).map((t: { Text?: string }) => t.Text).filter(Boolean).join('; ');
       if (topics) {
         return `Search Results: ${topics}`;
       }
     }
-    
+
     return `Based on Bureau of Labor Statistics and salary data sources, typical US wages for this role range from the median rates. Using standard BLS data for calculation.`;
   } catch (error) {
     console.error("Web search error:", error);
@@ -602,7 +612,7 @@ export async function POST(request: NextRequest) {
 
           while (iteration < MAX_ITERATIONS) {
             iteration++;
-            
+
             let accumulatedText = "";
             let toolUseBlock: Anthropic.ToolUseBlock | null = null;
             let currentToolInput = "";
@@ -663,9 +673,9 @@ export async function POST(request: NextRequest) {
             if (toolUseBlock && toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0) {
               const toolInput = toolUseBlock.input as Record<string, unknown>;
               const hasValidInput = Object.values(toolInput).some(v => v !== undefined && v !== null && v !== '');
-              
+
               console.log(`[SSE] Tool: ${toolUseBlock.name}, hasValidInput: ${hasValidInput}, keys: ${Object.keys(toolInput).join(', ')}`);
-              
+
               if (hasValidInput) {
                 let toolResult: string;
 
