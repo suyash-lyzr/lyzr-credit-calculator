@@ -49,6 +49,14 @@ export interface CalculationDetails {
   model_used: string;
 }
 
+export interface CreditRow {
+  action_profile: string;
+  complexity: string;
+  unit_price: number;
+  total_volume: number;
+  total_cost: number;
+}
+
 export interface CreditCalculation {
   agent_architecture_summary: string;
   action_profile: string;
@@ -57,6 +65,9 @@ export interface CreditCalculation {
   total_volume: number;
   total_annual_cost: number;
   calculation_details: CalculationDetails;
+  rows?: CreditRow[];
+  combined_total?: number;
+  combined_note?: string;
 }
 
 export interface HumanAnalysis {
