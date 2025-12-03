@@ -100,7 +100,7 @@ B. VARIABLE ACTION COSTS (Per Agent Step/Inference):
 Incurred dynamically based on the actions an agent takes during a run.
 | Constant | Value ($) | Description |
 | :--- | :--- | :--- |
-| PRICE_RETRIEVE_API_LIGHT | $0.20 | API Light Call (LLM Step) |
+| PRICE_RETRIEVE_API_LIGHT | $0.20 | API/Tool Light Call |
 | PRICE_RETRIEVE_TOOL | $0.20 | External Tool Execution |
 | PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
 | PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
@@ -384,7 +384,7 @@ Incurred once when the architecture is initialized.
 Incurred dynamically based on the actions an agent takes during a run.
 | Constant | Value ($) | Description |
 | :--- | :--- | :--- |
-| PRICE_RETRIEVE_API_LIGHT | $0.20 | API Light Call (LLM Step) |
+| PRICE_RETRIEVE_API_LIGHT | $0.20 | API/Tool Light Call |
 | PRICE_RETRIEVE_TOOL | $0.20 | External Tool Execution |
 | PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
 | PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
