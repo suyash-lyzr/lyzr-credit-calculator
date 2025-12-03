@@ -138,7 +138,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
                 isComplete={!!artifactState.credits}
               />
               {artifactState.isLoading.credits && !artifactState.credits ? (
-                <LoadingPlaceholder message="Calculating credit costs with 20% overhead..." />
+                <LoadingPlaceholder message="Calculating credit costs..." />
               ) : (
                 <CreditCalculation
                   data={artifactState.credits}
