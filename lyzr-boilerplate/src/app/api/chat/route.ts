@@ -360,7 +360,7 @@ When user describes their use case, ask 2-3 quick questions using this JSON form
 ### STEP 2: Analyze & Calculate
 CRITICAL: Once you receive user selections (e.g., "My selections: ..."), DO NOT output another questionnaire.
 Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
-1. generate_architecture - Analyze use case and determine N variables
+1. generate_architecture - Analyze use case and determine N variables - Your goal is to build a high level architecture.
 2. calculate_credits - Apply exact formulas to compute costs
 3. calculate_roi - Compare AI vs human costs
 
