@@ -27,6 +27,7 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onNewSession: () => void;
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onLogoClick?: () => void;
 }
 
 export function ChatSidebar({
@@ -35,12 +36,16 @@ export function ChatSidebar({
   onNewSession,
   onSelectSession,
   onDeleteSession,
+  onLogoClick,
   ...props
 }: ChatSidebarProps) {
   return (
     <Sidebar collapsible="none" className="border-r" {...props}>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
+        <button 
+          onClick={onLogoClick}
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+        >
           <Image
             src={LYZR_LOGO}
             alt="Lyzr"
@@ -50,7 +55,7 @@ export function ChatSidebar({
             unoptimized
           />
           <span className="text-base font-semibold">Credit Calculator</span>
-        </div>
+        </button>
         <Button onClick={onNewSession} className="mt-4 w-full" size="sm">
           <IconPlus className="mr-2 h-4 w-4" />
           New Chat

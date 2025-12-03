@@ -17,17 +17,15 @@ import {
 
 let idCounter = 0;
 function generateId() {
-  idCounter += 1;
-  return `id-${idCounter}-${Date.now()}`;
+  if (typeof window !== 'undefined') {
+    idCounter += 1;
+    return `id-${idCounter}-${Date.now()}`;
+  }
+  return `server-id-${idCounter++}`;
 }
 
 export default function CreditCalculatorPage() {
-  const [isClient, setIsClient] = React.useState(false);
   const [sessions, setSessions] = React.useState<ChatSession[]>([]);
-
-  React.useEffect(() => {
-    setIsClient(true);
-  }, []);
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [streamingContent, setStreamingContent] = React.useState("");
@@ -89,6 +87,17 @@ export default function CreditCalculatorPage() {
     },
     [activeSessionId, sessions]
   );
+
+  const goToHome = React.useCallback(() => {
+    setActiveSessionId(null);
+    setHasStartedConversation(false);
+    setArtifactState({
+      architecture: null,
+      credits: null,
+      roi: null,
+      isLoading: { architecture: false, credits: false, roi: false },
+    });
+  }, []);
 
   const sendMessage = React.useCallback(
     async (content: string) => {
@@ -309,6 +318,7 @@ export default function CreditCalculatorPage() {
             onNewSession={createNewSession}
             onSelectSession={selectSession}
             onDeleteSession={deleteSession}
+            onLogoClick={goToHome}
             className="w-64 shrink-0"
           />
           <div className="flex-1 flex items-center justify-center">
@@ -331,6 +341,7 @@ export default function CreditCalculatorPage() {
           onNewSession={createNewSession}
           onSelectSession={selectSession}
           onDeleteSession={deleteSession}
+          onLogoClick={goToHome}
           className="w-64 shrink-0"
         />
         <div className="flex flex-1 min-w-0 h-screen overflow-hidden">
