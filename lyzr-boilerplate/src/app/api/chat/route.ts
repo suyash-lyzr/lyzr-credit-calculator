@@ -17,13 +17,13 @@ N_Agents: How many agents needed?
 
 N_KB: Does use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No)
 N_RAI: Is domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No)
-N_Tools: Count of tool integrations needed
+N_Tools: Count of tool integrations
 
 Also determine scenario variables per inference:
 B_Mem: IF Conversational = 1, IF Transactional/Process = 0
 B_KB: IF Search/Analysis = 1, ELSE = 0
 B_RAI: IF High Complexity/External Output = 1, ELSE = 0
-B_API: = N_Agents + N_Tools_Called_Per_Run`,
+B_API: = N_Tools_Called_Per_Run (ONLY external tool/API calls, NOT agent executions - LLM cost is separate)`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -60,7 +60,7 @@ B_API: = N_Agents + N_Tools_Called_Per_Run`,
             b_mem: { type: "number", description: "Memory count (1 if chat, 0 if transactional)" },
             b_kb: { type: "number", description: "KB retrieval count (1 if search/analysis, 0 otherwise)" },
             b_rai: { type: "number", description: "Safety count (1 if high complexity, 0 otherwise)" },
-            b_api: { type: "number", description: "Action count = N_Agents + N_Tools_Per_Run" },
+            b_api: { type: "number", description: "Action count = N_Tools_Called_Per_Run" },
           },
           required: ["b_mem", "b_kb", "b_rai", "b_api"],
         },
@@ -427,7 +427,8 @@ B_RAI (Safety Count):
 - ELSE: 0
 
 B_API (Action Count):
-- Formula: N_Agents + N_Tools_Called_Per_Run
+- Logic: ONLY count external tool/API calls per run (OCR, Database, CRM, etc.)
+- Formula: $N_{Tools\_Called\_Per\_Run}$ (DO NOT include agent executions - LLM cost is already in Cost_Model)
 
 **Step 3: Define Volume Dynamics**
 
@@ -479,7 +480,7 @@ Total_Annual = Cost_Fixed + (N_Sessions × 0.05) + (N_Runs × Cost_Inference)
 
 CRUCIAL : If user mentions backlog/one-time volume, do NOT annualize or buffer it. Only use stated volume. - OR MAYBE ASK THIS IN FOLLOW UP IF CONFUSION.
 
-2. ARCHITECTURAL SIMULATION LOGIC (The Input Parser)You must simulate the architecture to determine the variables ($N$) used in the formulas.Step 1: Determine Architecture Counts ($N_{Total}$)Derive these counts from the Agent Architecture diagram or description.$N_{Agents}$ (Agent Count):Single Agent: = 1.Orchestrator Pattern: = 1 Manager + $X$ Sub-agents.Multi-Agent Chain: = Total number of agents in the workflow.$N_{KB}$ (Knowledge Bases):Logic: Does the use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No).$N_{RAI}$ (Safety Policies):Logic: Is the domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No).$N_{Tools}$ (Integrations):Logic: Count distinct external integrations (OCR, CRM, Database, Search).Step 2: Assign ModelsOrchestrator/Manager Agents: Assign GPT-5 (High reasoning).Worker/Sub-Agents: Assign GPT-5 Mini (Cost efficient).Simple Chat: Assign GPT-5 Nano.Step 3: Determine Scenario Variables per Inference ($B$ Variables)How many times does EACH action happen in one single run/inference?$B_{Mem}$ (Memory Count):IF Conversational/Chat: = 1 (Context required).IF Transactional/Process: = 0 (Stateless execution).$B_{KB}$ (KB Retrieval Count):IF Search/Analysis: = 1 (or more if intensive).ELSE: 0.$B_{RAI}$ (Safety Count):IF High Complexity/External Output: = 1.ELSE: 0.$B_{API}$ (Action Count):Logic: Sum of all Agent Steps + Tool Calls in the chain.Formula: $N_{Agents} + N_{Tools\_Called\_Per\_Run}$Step 4: Define Volume Dynamics$Vol_{User}$: The volume stated by the user.$N_{Sessions}$:IF Chat: $Vol_{User} / 5$ (5 turns per session).IF Transactional: $Vol_{User}$ (1 doc = 1 session).$N_{Runs}$ (Total Inferences):$Vol_{User} \times 1.20$ (Always add 20% Buffer for Simulation/Testing).3. CALCULATION FORMULAS (The Engine)Apply these formulas strictly in this order.A. Fixed Setup Cost$$Cost_{Fixed} = (N_{Agents} \times 0.05) + (N_{KB} \times 1.00) + (N_{RAI} \times 1.00) + (N_{Tools} \times 0.10)$$B. Infrastructure (LLM) Cost Per InferenceCalculate Weighted Average based on Agents:If Orchestrator (GPT-5) + 2 Workers (Mini):Cost = (1 * Cost_{GPT5}) + (2 * Cost_{Mini})$$Cost_{Model} = [ (\frac{Tokens_{In}}{1M} \times Price_{In}) + (\frac{Tokens_{Out}}{1M} \times Price_{Out}) ] \times 1.25$$C. Variable Lyzr Credit Cost Per InferenceSum of Base Run + Model + Actions.$$Cost_{Inference} = Cost_{Model} + 0.05 + (B_{Mem} \times 0.005) + (B_{KB} \times 0.05) + (B_{RAI} \times 0.15) + (B_{API} \times 0.20)$$D. Total Annual Cost$$Total_{Annual} = Cost_{Fixed} + (N_{Sessions} \times 0.05) + (N_{Runs} \times Cost_{Inference})$$
+2. ARCHITECTURAL SIMULATION LOGIC (The Input Parser)You must simulate the architecture to determine the variables ($N$) used in the formulas.Step 1: Determine Architecture Counts ($N_{Total}$)Derive these counts from the Agent Architecture diagram or description.$N_{Agents}$ (Agent Count):Single Agent: = 1.Orchestrator Pattern: = 1 Manager + $X$ Sub-agents.Multi-Agent Chain: = Total number of agents in the workflow.$N_{KB}$ (Knowledge Bases):Logic: Does the use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No).$N_{RAI}$ (Safety Policies):Logic: Is the domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No).$N_{Tools}$ (Integrations):Logic: Count distinct external integrations (OCR, CRM, Database, Search).Step 2: Assign ModelsOrchestrator/Manager Agents: Assign GPT-5 (High reasoning).Worker/Sub-Agents: Assign GPT-5 Mini (Cost efficient).Simple Chat: Assign GPT-5 Nano.Step 3: Determine Scenario Variables per Inference ($B$ Variables)How many times does EACH action happen in one single run/inference?$B_{Mem}$ (Memory Count):IF Conversational/Chat: = 1 (Context required).IF Transactional/Process: = 0 (Stateless execution).$B_{KB}$ (KB Retrieval Count):IF Search/Analysis: = 1 (or more if intensive).ELSE: 0.$B_{RAI}$ (Safety Count):IF High Complexity/External Output: = 1.ELSE: 0.$B_{API}$ (Action Count):Logic: ONLY count external tool/API calls per run (OCR, Database, Knowledge Graph writes, CRM, etc.).Formula: $N_{Tools\_Called\_Per\_Run}$ (Agent executions are NOT counted here - LLM cost is in Cost_Model)Step 4: Define Volume Dynamics$Vol_{User}$: The volume stated by the user.$N_{Sessions}$:IF Chat: $Vol_{User} / 5$ (5 turns per session).IF Transactional: $Vol_{User}$ (1 doc = 1 session).$N_{Runs}$ (Total Inferences):$Vol_{User} \times 1.20$ (Always add 20% Buffer for Simulation/Testing).3. CALCULATION FORMULAS (The Engine)Apply these formulas strictly in this order.A. Fixed Setup Cost$$Cost_{Fixed} = (N_{Agents} \times 0.05) + (N_{KB} \times 1.00) + (N_{RAI} \times 1.00) + (N_{Tools} \times 0.10)$$B. Infrastructure (LLM) Cost Per InferenceCalculate Weighted Average based on Agents:If Orchestrator (GPT-5) + 2 Workers (Mini):Cost = (1 * Cost_{GPT5}) + (2 * Cost_{Mini})$$Cost_{Model} = [ (\frac{Tokens_{In}}{1M} \times Price_{In}) + (\frac{Tokens_{Out}}{1M} \times Price_{Out}) ] \times 1.25$$C. Variable Lyzr Credit Cost Per InferenceSum of Base Run + Model + Actions.$$Cost_{Inference} = Cost_{Model} + 0.05 + (B_{Mem} \times 0.005) + (B_{KB} \times 0.05) + (B_{RAI} \times 0.15) + (B_{API} \times 0.20)$$D. Total Annual Cost$$Total_{Annual} = Cost_{Fixed} + (N_{Sessions} \times 0.05) + (N_{Runs} \times Cost_{Inference})$$
 
 ---
 
@@ -488,21 +489,21 @@ CRUCIAL : If user mentions backlog/one-time volume, do NOT annualize or buffer i
 **Scenario A: "HR Policy Chatbot" (LOW Complexity)**
 Architecture: 1 Agent, 1 KB (Policy PDF), No Tools, No RAI
 Variables: N_Agents=1, N_KB=1, N_Tools=0, N_RAI=0
-B_Mem=1 (Chat), B_KB=1 (Search), B_RAI=0, B_API=1
+B_Mem=1 (Chat), B_KB=1 (Search), B_RAI=0, B_API=0 (No external tools called)
 N_Sessions = Vol / 5
 Model: GPT_NANO
 
 **Scenario B: "Invoice Processing" (HIGH Complexity)**
 Architecture: 3 Agents (Ingest, Extract, Validate), 1 KB, 2 Tools (OCR, ERP), 1 RAI
 Variables: N_Agents=3, N_KB=1, N_Tools=2, N_RAI=1
-B_Mem=0 (Transactional), B_KB=1, B_RAI=1, B_API=5
+B_Mem=0 (Transactional), B_KB=1, B_RAI=1, B_API=2 (OCR + ERP calls)
 N_Sessions = Vol (1 invoice = 1 session)
 Model: GPT_MAIN
 
 **Scenario C: "Contract Review" (HIGH Complexity)**
 Architecture: 4 Agents (Parser, Analyzer, Risk Assessor, Summarizer), 1 KB, 1 Tool
 Variables: N_Agents=4, N_KB=1, N_Tools=1, N_RAI=1
-B_Mem=0 (Process), B_KB=1, B_RAI=1, B_API=5
+B_Mem=0 (Process), B_KB=1, B_RAI=1, B_API=1 (1 external tool call)
 Model: GPT_MAIN
 
 ---
