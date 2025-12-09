@@ -196,7 +196,13 @@ export default function CreditCalculatorPage() {
     
     const activeSessionData = sessions.find((s) => s.id === activeSessionId);
     const useCase = activeSessionData?.messages[0]?.content || name;
-    const chatHistory = activeSessionData?.messages || [];
+    const allMessages = activeSessionData?.messages || [];
+    
+    const chatHistory = allMessages.filter((msg) => {
+      if (msg.role === 'user' && msg.content.startsWith('My selections:')) return false;
+      if (msg.role === 'assistant' && msg.content.includes('"questions"')) return false;
+      return true;
+    });
     
     try {
       const response = await fetch('/api/templates', {
