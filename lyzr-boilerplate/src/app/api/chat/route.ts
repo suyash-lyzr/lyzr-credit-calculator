@@ -319,42 +319,46 @@ Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
     name: "review_and_validate",
     description: `You are a Quality Assurance Analyst reviewing the full calculation output for accuracy and business logic consistency.
 
-YOUR ROLE: Act as an independent reviewer who validates ALL THREE artifacts (Architecture, Credits, ROI) against real-world business rules.
+YOUR ROLE: Act as an independent reviewer who validates ALL THREE artifacts (Architecture, Credits, ROI) against real-world business rules and the specific use case context.
 
 CRITICAL VALIDATION CHECKS (Be Honest - Reject if fails):
 
 1. ARCHITECTURE CONSISTENCY CHECKS:
-   - Does N_Agents match the described workflow? (e.g., 3-agent chain should have N_Agents=3, not 1)
-   - Is N_KB=1 when docs/PDFs mentioned, 0 otherwise?
-   - Is N_RAI=1 for Finance/Legal/HR/Public-facing, 0 for internal tools?
-   - Does N_Tools match actual integrations described (OCR, CRM, DB, etc.)?
-   - Does B_API equal actual tool calls per run (NOT agent count)?
+   - Does N_Agents match the described workflow complexity and agent count in the diagram?
+   - Is N_KB=1 when documents, PDFs, or knowledge bases are mentioned in the use case, 0 otherwise?
+   - Is N_RAI=1 for regulated domains (Finance/Legal/HR) or public-facing applications, 0 for internal tools?
+   - Does N_Tools match actual external integrations described in the architecture?
+   - Does B_API equal actual tool/API calls per inference run (NOT agent execution count)?
+   - Do the scenario variables (B_Mem, B_KB, B_RAI, B_API) align with the workflow type and use case requirements?
 
 2. CREDIT CALCULATION SANITY CHECKS:
-   - Is unit price in expected range? (LOW: $0.10-$0.15, MEDIUM: $0.25-$0.35, HIGH: $0.45-$0.65)
-   - Does complexity match architecture? (Single agent ≠ HIGH complexity)
-   - Are token estimates realistic for use case? (Legal docs = 5k+ tokens, tickets = 1k-2k tokens)
-   - Is 20% buffer applied to ongoing volume but NOT backlog?
-   - For backlog + ongoing: Are there TWO rows in table with combined_total?
+   - Is unit price reasonable for the complexity level? Verify against formula: Cost_Inference = Cost_Model + Base_Run + (scenario variable costs)
+   - Does stated complexity match the architecture pattern? (Single agent should be LOW, Orchestrator should be MEDIUM, Multi-agent chains should be HIGH)
+   - Are token estimates appropriate for the use case domain? Consider document length, data complexity, and output requirements based on the specific use case
+   - Is 20% buffer applied ONLY to ongoing monthly volume, NOT to one-time backlog volumes?
+   - For combined workloads (backlog + ongoing): Are there separate rows in the table with a combined_total sum?
+   - Do volume calculations follow the correct formulas? (N_Runs = monthly × 12 × 1.20 for ongoing, exact count for backlog)
 
 3. ROI VALIDATION (CRITICAL - Most Common Errors):
-   - Is savings_percentage between 80-95%? (If <70% or >98%, likely error)
-   - Is mapped_role appropriate for use case? (Contract review = Paralegal, NOT "Admin")
-   - Is time_per_task_minutes realistic? (10min for ticket, 30min for invoice, 60min for contract)
-   - Is fully_loaded_rate = base_wage × 1.3? (Must include 30% overhead)
-   - Does human_yearly_cost = units_per_year × cost_per_unit make sense?
-   - Is AI faster than human? (time_savings_percentage should be 90%+)
+   - Is savings_percentage realistic for automation? Typical range is 80-95%, but assess based on task complexity
+   - Is the mapped_role appropriate and specific to the actual use case? (e.g., legal tasks → Paralegal/Legal Assistant, not generic roles)
+   - Is time_per_task_minutes realistic for the specific task type based on industry standards and task complexity?
+   - Is fully_loaded_rate correctly calculated as base_wage × 1.3 to include overhead (benefits, facilities, taxes)?
+   - Does human_yearly_cost calculation make mathematical sense: units_per_year × cost_per_unit?
+   - Is AI demonstrably faster than human processing? (time_savings_percentage should typically be 90%+ for automation)
+   - Are wage sources credible and recent (Bureau of Labor Statistics, Salary.com, Glassdoor)?
 
 4. CROSS-ARTIFACT CONSISTENCY:
-   - Does AI cost_per_unit in ROI match unit_price from Credits?
-   - Does volume in ROI match volume from Credits?
-   - Does architecture complexity justify the credit cost?
+   - Does AI cost_per_unit in ROI exactly match unit_price from Credit Calculation?
+   - Does volume used in ROI match the volume from Credit Calculation?
+   - Does the architecture complexity level justify the credit cost range?
+   - Are all three artifacts telling a coherent story about the same use case?
 
 DECISION LOGIC:
 - If ALL checks pass → status: "approved", issues: []
-- If ANY check fails → status: "needs_revision", issues: [list specific problems]
+- If ANY check fails → status: "needs_revision", issues: [list specific problems with artifact, severity, issue description, and expected correction]
 
-BE BRUTALLY HONEST: Don't approve if something looks wrong. It's better to revise once than deliver bad estimates.`,
+BE BRUTALLY HONEST: Don't approve if something looks wrong. It's better to revise once than deliver inaccurate estimates. Focus on mathematical correctness, logical consistency, and real-world plausibility for the specific use case.`,
     input_schema: {
       type: "object" as const,
       properties: {
