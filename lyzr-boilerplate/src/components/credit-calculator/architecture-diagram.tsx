@@ -1,21 +1,117 @@
 "use client";
 
 import * as React from "react";
-import { IconLoader2, IconZoomIn, IconZoomOut, IconFocus2 } from "@tabler/icons-react";
+import { IconLoader2, IconZoomIn, IconZoomOut, IconFocus2, IconMaximize, IconX } from "@tabler/icons-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArchitectureData } from "@/lib/types";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import mermaid from "mermaid";
+import { createPortal } from "react-dom";
 
 interface ArchitectureDiagramProps {
   data: ArchitectureData | null;
   isLoading: boolean;
 }
 
+function DiagramModal({ svgContent, title, summary, onClose }: { svgContent: string; title: string; summary: string; onClose: () => void }) {
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h2 className="text-lg font-semibold">{title}</h2>
+            <p className="text-sm text-muted-foreground">{summary}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
+            <IconX className="h-5 w-5" />
+          </Button>
+        </div>
+        <div className="flex-1 relative overflow-hidden">
+          <TransformWrapper
+            initialScale={1}
+            minScale={0.3}
+            maxScale={5}
+            centerOnInit={true}
+            wheel={{ step: 0.1 }}
+            panning={{ disabled: false }}
+            limitToBounds={false}
+          >
+            {({ zoomIn, zoomOut, resetTransform }) => (
+              <>
+                <div className="absolute top-4 right-4 z-10 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-white/90 hover:bg-white shadow-md"
+                    onClick={() => zoomIn()}
+                  >
+                    <IconZoomIn className="h-4 w-4 mr-1" /> Zoom In
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-white/90 hover:bg-white shadow-md"
+                    onClick={() => zoomOut()}
+                  >
+                    <IconZoomOut className="h-4 w-4 mr-1" /> Zoom Out
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-white/90 hover:bg-white shadow-md"
+                    onClick={() => resetTransform()}
+                  >
+                    <IconFocus2 className="h-4 w-4 mr-1" /> Reset
+                  </Button>
+                </div>
+                <TransformComponent
+                  wrapperStyle={{ width: "100%", height: "100%" }}
+                  contentStyle={{
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div
+                    className="[&_svg]:max-w-none [&_svg]:max-h-none cursor-grab active:cursor-grabbing p-8"
+                    dangerouslySetInnerHTML={{ __html: svgContent }}
+                  />
+                </TransformComponent>
+                <div className="absolute bottom-4 left-4 text-sm text-muted-foreground bg-white/90 px-3 py-2 rounded-lg shadow">
+                  Drag to pan | Scroll to zoom | Press Escape to close
+                </div>
+              </>
+            )}
+          </TransformWrapper>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = React.useState<string>("");
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
   const renderCountRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -119,6 +215,15 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
                       >
                         <IconFocus2 className="h-4 w-4" />
                       </Button>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-primary/90 hover:bg-primary text-white shadow-sm"
+                        onClick={() => setIsModalOpen(true)}
+                        title="View Full Screen"
+                      >
+                        <IconMaximize className="h-4 w-4" />
+                      </Button>
                     </div>
                     <TransformComponent
                       wrapperStyle={{
@@ -154,6 +259,14 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
           </div>
         )}
       </CardContent>
+      {isModalOpen && data && svgContent && (
+        <DiagramModal
+          svgContent={svgContent}
+          title={data.title}
+          summary={data.summary}
+          onClose={() => setIsModalOpen(false)}
+        />
+      )}
     </Card>
   );
 }

@@ -6,7 +6,7 @@ import { CreditCalculation } from "./credit-calculation";
 import { ROICalculation } from "./roi-calculation";
 import { ReviewValidation } from "./review-validation";
 import { ArtifactState } from "@/lib/types";
-import { IconBrain, IconCoins, IconChartBar, IconShieldCheck, IconLoader2, IconCheck } from "@tabler/icons-react";
+import { IconBrain, IconCoins, IconChartBar, IconShieldCheck, IconLoader2, IconCheck, IconCalculator } from "@tabler/icons-react";
 
 interface ArtifactPanelProps {
   artifactState: ArtifactState;

@@ -24,6 +24,39 @@ function generateId() {
   return `server-id-${idCounter++}`;
 }
 
+const STORAGE_KEY = 'lyzr-credit-calculator-sessions';
+
+function loadSessionsFromStorage(): ChatSession[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed.map((s: ChatSession) => ({
+        ...s,
+        createdAt: new Date(s.createdAt),
+        updatedAt: new Date(s.updatedAt),
+        messages: s.messages.map((m: ChatMessage) => ({
+          ...m,
+          timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
+        })),
+      }));
+    }
+  } catch (e) {
+    console.error('Failed to load sessions from storage:', e);
+  }
+  return [];
+}
+
+function saveSessionsToStorage(sessions: ChatSession[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  } catch (e) {
+    console.error('Failed to save sessions to storage:', e);
+  }
+}
+
 export default function CreditCalculatorPage() {
   const [sessions, setSessions] = React.useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(null);
@@ -33,13 +66,30 @@ export default function CreditCalculatorPage() {
     architecture: null,
     credits: null,
     roi: null,
+    review: null,
     isLoading: {
       architecture: false,
       credits: false,
       roi: false,
+      review: false,
     },
   });
   const [hasStartedConversation, setHasStartedConversation] = React.useState(false);
+  const [isHydrated, setIsHydrated] = React.useState(false);
+
+  React.useEffect(() => {
+    const loaded = loadSessionsFromStorage();
+    if (loaded.length > 0) {
+      setSessions(loaded);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (isHydrated && sessions.length > 0) {
+      saveSessionsToStorage(sessions);
+    }
+  }, [sessions, isHydrated]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -57,7 +107,8 @@ export default function CreditCalculatorPage() {
       architecture: null,
       credits: null,
       roi: null,
-      isLoading: { architecture: false, credits: false, roi: false },
+      review: null,
+      isLoading: { architecture: false, credits: false, roi: false, review: false },
     });
   }, []);
 
@@ -68,7 +119,8 @@ export default function CreditCalculatorPage() {
       architecture: null,
       credits: null,
       roi: null,
-      isLoading: { architecture: false, credits: false, roi: false },
+      review: null,
+      isLoading: { architecture: false, credits: false, roi: false, review: false },
     });
   }, []);
 
@@ -95,7 +147,8 @@ export default function CreditCalculatorPage() {
       architecture: null,
       credits: null,
       roi: null,
-      isLoading: { architecture: false, credits: false, roi: false },
+      review: null,
+      isLoading: { architecture: false, credits: false, roi: false, review: false },
     });
   }, []);
 
@@ -118,7 +171,8 @@ export default function CreditCalculatorPage() {
           architecture: null,
           credits: null,
           roi: null,
-          isLoading: { architecture: false, credits: false, roi: false },
+          review: null,
+          isLoading: { architecture: false, credits: false, roi: false, review: false },
         });
       }
 
