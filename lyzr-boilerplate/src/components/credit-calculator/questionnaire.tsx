@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -62,115 +61,102 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
   });
 
   return (
-    <Card className={`border-primary/20 ${isSubmitted ? "bg-muted/30" : "bg-gradient-to-br from-primary/5 to-primary/10"}`}>
-      <CardHeader className="py-1.5 px-2.5">
-        <div className="flex items-center gap-2">
-          {isSubmitted && (
-            <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900">
-              <IconCheck className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+    <div className="mt-3 space-y-3">
+      <p className="text-sm text-muted-foreground">{data.intro}</p>
+      
+      {data.questions.map((question) => (
+        <div key={question.id} className="space-y-1.5">
+          <Label className="text-sm font-medium text-foreground">
+            {question.question}
+          </Label>
+          
+          {question.type === "radio" ? (
+            <RadioGroup
+              value={responses[question.id] as string || ""}
+              onValueChange={(value) => handleRadioChange(question.id, value)}
+              className="grid grid-cols-2 gap-1.5"
+              disabled={isSubmitted}
+            >
+              {question.options.map((option) => {
+                const isSelected = responses[question.id] === option;
+                if (isSubmitted && !isSelected) return null;
+                return (
+                  <label
+                    key={option}
+                    htmlFor={`${question.id}-${option}`}
+                    className={`flex items-center gap-2 rounded-lg border py-2 px-3 transition-all ${
+                      isSubmitted 
+                        ? "bg-primary/10 border-primary/30 cursor-default" 
+                        : isSelected 
+                          ? "bg-primary/5 border-primary/40 cursor-pointer" 
+                          : "bg-background border-border hover:bg-muted/50 cursor-pointer"
+                    }`}
+                  >
+                    {!isSubmitted && (
+                      <RadioGroupItem 
+                        value={option} 
+                        id={`${question.id}-${option}`}
+                        className="border-primary data-[state=checked]:border-primary data-[state=checked]:text-primary h-4 w-4"
+                      />
+                    )}
+                    {isSubmitted && <IconCheck className="h-4 w-4 text-primary flex-shrink-0" />}
+                    <span className="text-sm flex-1">
+                      {option}
+                    </span>
+                  </label>
+                );
+              })}
+            </RadioGroup>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5">
+              {question.options.map((option) => {
+                const isChecked = ((responses[question.id] as string[]) || []).includes(option);
+                if (isSubmitted && !isChecked) return null;
+                return (
+                  <label
+                    key={option}
+                    htmlFor={`${question.id}-${option}`}
+                    className={`flex items-center gap-2 rounded-lg border py-2 px-3 transition-all ${
+                      isSubmitted 
+                        ? "bg-primary/10 border-primary/30 cursor-default" 
+                        : isChecked 
+                          ? "bg-primary/5 border-primary/40 cursor-pointer" 
+                          : "bg-background border-border hover:bg-muted/50 cursor-pointer"
+                    }`}
+                  >
+                    {!isSubmitted && (
+                      <Checkbox
+                        id={`${question.id}-${option}`}
+                        checked={isChecked}
+                        className="border-primary data-[state=checked]:border-primary data-[state=checked]:bg-primary h-4 w-4"
+                        onCheckedChange={(checked) =>
+                          handleCheckboxChange(question.id, option, checked as boolean)
+                        }
+                      />
+                    )}
+                    {isSubmitted && <IconCheck className="h-4 w-4 text-primary flex-shrink-0" />}
+                    <span className="text-sm flex-1">
+                      {option}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           )}
-          <CardTitle className="text-xs font-medium">
-            {isSubmitted ? "Your Selections" : data.intro}
-          </CardTitle>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-2 px-2.5 pb-2.5">
-        {data.questions.map((question) => (
-          <div key={question.id} className="space-y-1">
-            <Label className="text-xs font-medium text-foreground">
-              {question.question}
-            </Label>
-            
-            {question.type === "radio" ? (
-              <RadioGroup
-                value={responses[question.id] as string || ""}
-                onValueChange={(value) => handleRadioChange(question.id, value)}
-                className="grid grid-cols-2 gap-1"
-                disabled={isSubmitted}
-              >
-                {question.options.map((option) => {
-                  const isSelected = responses[question.id] === option;
-                  if (isSubmitted && !isSelected) return null;
-                  return (
-                    <label
-                      key={option}
-                      htmlFor={`${question.id}-${option}`}
-                      className={`flex items-center gap-1.5 rounded-md border py-1.5 px-2 transition-all ${
-                        isSubmitted 
-                          ? "bg-primary/10 border-primary/30 cursor-default" 
-                          : isSelected 
-                            ? "bg-primary/5 border-muted-foreground/30 cursor-pointer" 
-                            : "bg-background border-border hover:bg-muted/50 cursor-pointer"
-                      }`}
-                    >
-                      {!isSubmitted && (
-                        <RadioGroupItem 
-                          value={option} 
-                          id={`${question.id}-${option}`}
-                          className="border-primary data-[state=checked]:border-primary data-[state=checked]:text-primary h-3.5 w-3.5"
-                        />
-                      )}
-                      {isSubmitted && <IconCheck className="h-3 w-3 text-primary flex-shrink-0" />}
-                      <span className="text-xs flex-1 leading-tight">
-                        {option}
-                      </span>
-                    </label>
-                  );
-                })}
-              </RadioGroup>
-            ) : (
-              <div className="grid grid-cols-2 gap-1">
-                {question.options.map((option) => {
-                  const isChecked = ((responses[question.id] as string[]) || []).includes(option);
-                  if (isSubmitted && !isChecked) return null;
-                  return (
-                    <label
-                      key={option}
-                      htmlFor={`${question.id}-${option}`}
-                      className={`flex items-center gap-1.5 rounded-md border py-1.5 px-2 transition-all ${
-                        isSubmitted 
-                          ? "bg-primary/10 border-primary/30 cursor-default" 
-                          : isChecked 
-                            ? "bg-primary/5 border-muted-foreground/30 cursor-pointer" 
-                            : "bg-background border-border hover:bg-muted/50 cursor-pointer"
-                      }`}
-                    >
-                      {!isSubmitted && (
-                        <Checkbox
-                          id={`${question.id}-${option}`}
-                          checked={isChecked}
-                          className="border-primary data-[state=checked]:border-primary data-[state=checked]:bg-primary h-3.5 w-3.5"
-                          onCheckedChange={(checked) =>
-                            handleCheckboxChange(question.id, option, checked as boolean)
-                          }
-                        />
-                      )}
-                      {isSubmitted && <IconCheck className="h-3 w-3 text-primary flex-shrink-0" />}
-                      <span className="text-xs flex-1 leading-tight">
-                        {option}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
+      ))}
 
-        {!isSubmitted && (
-          <Button
-            onClick={handleSubmit}
-            disabled={!isComplete || isLoading}
-            className="w-full mt-1.5"
-            size="sm"
-          >
-            <IconSend className="mr-1.5 h-3.5 w-3.5" />
-            Calculate Credits & ROI
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      {!isSubmitted && (
+        <Button
+          onClick={handleSubmit}
+          disabled={!isComplete || isLoading}
+          className="w-full mt-2"
+        >
+          <IconSend className="mr-2 h-4 w-4" />
+          Calculate Credits & ROI
+        </Button>
+      )}
+    </div>
   );
 }
 
