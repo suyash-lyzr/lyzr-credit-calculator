@@ -471,7 +471,13 @@ Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
 3. calculate_roi - Compare AI vs human costs
 4. review_and_validate - Quality check all outputs for accuracy and business logic
 
-After review, if status="needs_revision", you MUST revise the problematic artifact by calling the appropriate tool again with corrections.
+### STEP 3: Review Iteration (MAX 3 ITERATIONS)
+After review, if status="needs_revision":
+- Revise the problematic artifact by calling the appropriate tool again with corrections
+- Call review_and_validate again to verify the fix
+- MAXIMUM 3 REVISION ITERATIONS - after 3 attempts, approve with a note about remaining minor issues
+- The iteration count RESETS when the user sends a new message (continuing the conversation)
+- Always aim to get "approved" status, but don't loop forever
 
 ---
 

@@ -13,6 +13,7 @@ import {
   ArchitectureData,
   CreditCalculation,
   ROICalculation,
+  ReviewValidation,
 } from "@/lib/types";
 
 let idCounter = 0;
@@ -246,6 +247,11 @@ export default function CreditCalculatorPage() {
                 ...prev,
                 isLoading: { ...prev.isLoading, roi: true },
               }));
+            } else if (toolName === "review_and_validate") {
+              setArtifactState((prev) => ({
+                ...prev,
+                isLoading: { ...prev.isLoading, review: true },
+              }));
             }
             break;
 
@@ -272,6 +278,13 @@ export default function CreditCalculatorPage() {
                 ...prev,
                 roi: toolResult.data as ROICalculation,
                 isLoading: { ...prev.isLoading, roi: false },
+              }));
+            } else if (toolResult.tool === "review_and_validate") {
+              console.log(`[FE] Setting review data`);
+              setArtifactState((prev) => ({
+                ...prev,
+                review: toolResult.data as ReviewValidation,
+                isLoading: { ...prev.isLoading, review: false },
               }));
             }
             break;

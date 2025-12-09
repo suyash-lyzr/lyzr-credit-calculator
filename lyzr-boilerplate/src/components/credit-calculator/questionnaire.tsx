@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { IconSend } from "@tabler/icons-react";
+import { IconSend, IconCheck } from "@tabler/icons-react";
 
 interface Question {
   id: string;
@@ -25,16 +25,20 @@ interface QuestionnaireProps {
   data: QuestionnaireData;
   onSubmit: (responses: Record<string, string | string[]>, questions: { id: string; question: string }[]) => void;
   isLoading?: boolean;
+  submittedResponses?: Record<string, string | string[]>;
 }
 
-export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps) {
-  const [responses, setResponses] = React.useState<Record<string, string | string[]>>({});
+export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }: QuestionnaireProps) {
+  const [responses, setResponses] = React.useState<Record<string, string | string[]>>(submittedResponses || {});
+  const isSubmitted = !!submittedResponses;
 
   const handleRadioChange = (questionId: string, value: string) => {
+    if (isSubmitted) return;
     setResponses((prev) => ({ ...prev, [questionId]: value }));
   };
 
   const handleCheckboxChange = (questionId: string, option: string, checked: boolean) => {
+    if (isSubmitted) return;
     setResponses((prev) => {
       const current = (prev[questionId] as string[]) || [];
       if (checked) {
@@ -58,9 +62,18 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
   });
 
   return (
-    <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+    <Card className={`border-primary/20 ${isSubmitted ? "bg-muted/30" : "bg-gradient-to-br from-primary/5 to-primary/10"}`}>
       <CardHeader className="py-1.5 px-2.5">
-        <CardTitle className="text-xs font-medium">{data.intro}</CardTitle>
+        <div className="flex items-center gap-2">
+          {isSubmitted && (
+            <div className="flex items-center justify-center w-4 h-4 rounded-full bg-green-100 dark:bg-green-900">
+              <IconCheck className="h-2.5 w-2.5 text-green-600 dark:text-green-400" />
+            </div>
+          )}
+          <CardTitle className="text-xs font-medium">
+            {isSubmitted ? "Your Selections" : data.intro}
+          </CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2 px-2.5 pb-2.5">
         {data.questions.map((question) => (
@@ -74,24 +87,31 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
                 value={responses[question.id] as string || ""}
                 onValueChange={(value) => handleRadioChange(question.id, value)}
                 className="grid grid-cols-2 gap-1"
+                disabled={isSubmitted}
               >
                 {question.options.map((option) => {
                   const isSelected = responses[question.id] === option;
+                  if (isSubmitted && !isSelected) return null;
                   return (
                     <label
                       key={option}
                       htmlFor={`${question.id}-${option}`}
-                      className={`flex items-center gap-1.5 rounded-md border py-1.5 px-2 cursor-pointer transition-all ${
-                        isSelected 
-                          ? "bg-primary/5 border-muted-foreground/30" 
-                          : "bg-background border-border hover:bg-muted/50"
+                      className={`flex items-center gap-1.5 rounded-md border py-1.5 px-2 transition-all ${
+                        isSubmitted 
+                          ? "bg-primary/10 border-primary/30 cursor-default" 
+                          : isSelected 
+                            ? "bg-primary/5 border-muted-foreground/30 cursor-pointer" 
+                            : "bg-background border-border hover:bg-muted/50 cursor-pointer"
                       }`}
                     >
-                      <RadioGroupItem 
-                        value={option} 
-                        id={`${question.id}-${option}`}
-                        className="border-primary data-[state=checked]:border-primary data-[state=checked]:text-primary h-3.5 w-3.5"
-                      />
+                      {!isSubmitted && (
+                        <RadioGroupItem 
+                          value={option} 
+                          id={`${question.id}-${option}`}
+                          className="border-primary data-[state=checked]:border-primary data-[state=checked]:text-primary h-3.5 w-3.5"
+                        />
+                      )}
+                      {isSubmitted && <IconCheck className="h-3 w-3 text-primary flex-shrink-0" />}
                       <span className="text-xs flex-1 leading-tight">
                         {option}
                       </span>
@@ -103,24 +123,30 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
               <div className="grid grid-cols-2 gap-1">
                 {question.options.map((option) => {
                   const isChecked = ((responses[question.id] as string[]) || []).includes(option);
+                  if (isSubmitted && !isChecked) return null;
                   return (
                     <label
                       key={option}
                       htmlFor={`${question.id}-${option}`}
-                      className={`flex items-center gap-1.5 rounded-md border py-1.5 px-2 cursor-pointer transition-all ${
-                        isChecked 
-                          ? "bg-primary/5 border-muted-foreground/30" 
-                          : "bg-background border-border hover:bg-muted/50"
+                      className={`flex items-center gap-1.5 rounded-md border py-1.5 px-2 transition-all ${
+                        isSubmitted 
+                          ? "bg-primary/10 border-primary/30 cursor-default" 
+                          : isChecked 
+                            ? "bg-primary/5 border-muted-foreground/30 cursor-pointer" 
+                            : "bg-background border-border hover:bg-muted/50 cursor-pointer"
                       }`}
                     >
-                      <Checkbox
-                        id={`${question.id}-${option}`}
-                        checked={isChecked}
-                        className="border-primary data-[state=checked]:border-primary data-[state=checked]:bg-primary h-3.5 w-3.5"
-                        onCheckedChange={(checked) =>
-                          handleCheckboxChange(question.id, option, checked as boolean)
-                        }
-                      />
+                      {!isSubmitted && (
+                        <Checkbox
+                          id={`${question.id}-${option}`}
+                          checked={isChecked}
+                          className="border-primary data-[state=checked]:border-primary data-[state=checked]:bg-primary h-3.5 w-3.5"
+                          onCheckedChange={(checked) =>
+                            handleCheckboxChange(question.id, option, checked as boolean)
+                          }
+                        />
+                      )}
+                      {isSubmitted && <IconCheck className="h-3 w-3 text-primary flex-shrink-0" />}
                       <span className="text-xs flex-1 leading-tight">
                         {option}
                       </span>
@@ -132,15 +158,17 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
           </div>
         ))}
 
-        <Button
-          onClick={handleSubmit}
-          disabled={!isComplete || isLoading}
-          className="w-full mt-1.5"
-          size="sm"
-        >
-          <IconSend className="mr-1.5 h-3.5 w-3.5" />
-          Calculate Credits & ROI
-        </Button>
+        {!isSubmitted && (
+          <Button
+            onClick={handleSubmit}
+            disabled={!isComplete || isLoading}
+            className="w-full mt-1.5"
+            size="sm"
+          >
+            <IconSend className="mr-1.5 h-3.5 w-3.5" />
+            Calculate Credits & ROI
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

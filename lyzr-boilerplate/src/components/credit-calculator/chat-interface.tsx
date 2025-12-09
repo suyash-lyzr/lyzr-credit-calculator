@@ -14,6 +14,12 @@ import { Questionnaire, parseQuestionnaire } from "./questionnaire";
 const LYZR_ICON = "https://cdn2.futurepedia.io/2024-09-18T20-25-23.994Z-lyyk.png?w=256";
 const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
 
+interface QuestionnaireSubmission {
+  messageId: string;
+  responses: Record<string, string | string[]>;
+  questionnaireData: ReturnType<typeof parseQuestionnaire>;
+}
+
 interface ChatInterfaceProps {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -49,6 +55,7 @@ export function ChatInterface({
   hasArtifacts = false,
 }: ChatInterfaceProps) {
   const [input, setInput] = React.useState("");
+  const [submittedQuestionnaires, setSubmittedQuestionnaires] = React.useState<QuestionnaireSubmission[]>([]);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -66,7 +73,14 @@ export function ChatInterface({
     }
   };
 
-  const handleQuestionnaireSubmit = (responses: Record<string, string | string[]>, questions: { id: string; question: string }[]) => {
+  const handleQuestionnaireSubmit = (
+    responses: Record<string, string | string[]>, 
+    questions: { id: string; question: string }[],
+    messageId: string,
+    questionnaireData: ReturnType<typeof parseQuestionnaire>
+  ) => {
+    setSubmittedQuestionnaires(prev => [...prev, { messageId, responses, questionnaireData }]);
+    
     const formattedParts: string[] = [];
     questions.forEach((q) => {
       const value = responses[q.id];
@@ -78,14 +92,20 @@ export function ChatInterface({
     const message = `My selections:\n${formattedParts.join("\n")}`;
     onSendMessage(message);
   };
+  
+  const getSubmittedResponses = (messageId: string): Record<string, string | string[]> | undefined => {
+    return submittedQuestionnaires.find(q => q.messageId === messageId)?.responses;
+  };
 
   const renderMessageContent = (message: ChatMessage, isLastAssistantMessage: boolean) => {
     if (message.role === "user") {
-      return <p className="text-sm">{message.content}</p>;
+      return <p className="text-sm whitespace-pre-wrap">{message.content}</p>;
     }
 
     const questionnaire = parseQuestionnaire(message.content);
     const textContent = removeQuestionnaireJson(message.content);
+    const submittedResponses = getSubmittedResponses(message.id);
+    const isQuestionnaireSubmitted = !!submittedResponses;
 
     return (
       <div className="space-y-3">
@@ -94,12 +114,13 @@ export function ChatInterface({
             <Streamdown>{textContent}</Streamdown>
           </div>
         )}
-        {questionnaire && isLastAssistantMessage && !isLoading && !hasArtifacts && (
+        {questionnaire && (isLastAssistantMessage || isQuestionnaireSubmitted) && !isLoading && (
           <div className="mt-3">
             <Questionnaire
               data={questionnaire}
-              onSubmit={handleQuestionnaireSubmit}
+              onSubmit={(responses, questions) => handleQuestionnaireSubmit(responses, questions, message.id, questionnaire)}
               isLoading={isLoading}
+              submittedResponses={submittedResponses}
             />
           </div>
         )}
