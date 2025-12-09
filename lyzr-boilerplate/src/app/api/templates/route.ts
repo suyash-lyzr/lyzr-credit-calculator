@@ -5,6 +5,11 @@ import { desc } from "drizzle-orm";
 
 export async function GET() {
   try {
+    if (!db) {
+      console.error("Database not available - DATABASE_URL not set");
+      return NextResponse.json([], { status: 200 });
+    }
+
     const allTemplates = await db
       .select()
       .from(templates)
@@ -22,6 +27,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!db) {
+      console.error("Database not available - DATABASE_URL not set");
+      return NextResponse.json(
+        { error: "Database not configured" },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
     const { name, description, useCase, architecture, credits, roi, chatHistory } = body;
 
