@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { IconSend, IconLoader2, IconChartBar, IconCpu } from "@tabler/icons-react";
+import { IconSend, IconLoader2 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { SavedTemplate } from "@/lib/types";
+import mermaid from "mermaid";
 
 interface LandingPageProps {
   onSubmit: (message: string) => void;
@@ -48,15 +49,6 @@ export function LandingPage({
   React.useEffect(() => {
     adjustTextareaHeight();
   }, [input]);
-
-  const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(1)}M`;
-    } else if (value >= 1000) {
-      return `$${(value / 1000).toFixed(1)}K`;
-    }
-    return `$${value.toFixed(0)}`;
-  };
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background overflow-y-auto">
@@ -116,76 +108,29 @@ export function LandingPage({
           />
         </div>
 
+        <p className="mt-12 text-center text-[18px] text-muted-foreground italic max-w-2xl mx-auto">
+          Lyzr follows a transparent pricing model where customers pay only for Agent Actions, not the underlying LLM or compute cost.
+        </p>
+
         {templates.length > 0 && (
-          <div className="mt-10">
-            <div className="flex items-center gap-2 mb-4">
-              <IconCpu className="h-4 w-4 text-primary" />
-              <h3 className="text-sm font-semibold text-foreground">Saved Estimations</h3>
-              <span className="text-xs text-muted-foreground">({templates.length})</span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                Press Cmd+Shift+S to manage
-              </span>
-            </div>
+          <div className="mt-16">
+            <h3 className="text-lg font-semibold text-foreground mb-6 text-center">Common use cases</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {templates.slice(0, 6).map((template) => (
-                <div
+                <TemplateCard
                   key={template.id}
-                  className="group relative flex flex-col p-4 rounded-xl border border-border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer"
+                  template={template}
                   onClick={() => onLoadTemplate?.(template)}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      template.architecture.complexity_profile === 'LOW' 
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        : template.architecture.complexity_profile === 'MEDIUM'
-                        ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                    }`}>
-                      {template.architecture.complexity_profile}
-                    </span>
-                  </div>
-
-                  <h3 className="font-semibold text-sm mb-1 line-clamp-1">
-                    {template.name}
-                  </h3>
-                  
-                  {template.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 mb-3">
-                      {template.description}
-                    </p>
-                  )}
-
-                  <div className="mt-auto pt-3 border-t border-border/50">
-                    <div className="text-xs text-muted-foreground mb-2 font-mono line-clamp-1">
-                      {template.architecture.architecture_pattern} | {template.architecture.architecture_counts.n_agents} Agent{template.architecture.architecture_counts.n_agents !== 1 ? 's' : ''}
-                      {template.architecture.architecture_counts.n_kb > 0 && ` | KB`}
-                      {template.architecture.architecture_counts.n_tools > 0 && ` | ${template.architecture.architecture_counts.n_tools} Tools`}
-                    </div>
-                    
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <IconChartBar className="h-3.5 w-3.5" />
-                        <span>{formatCurrency(template.credits.combined_total || template.credits.total_annual_cost)}/yr</span>
-                      </div>
-                      <div className="text-green-600 dark:text-green-400 font-semibold">
-                        {template.roi.comparison.savings_percentage.toFixed(0)}% savings
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                />
               ))}
             </div>
             {templates.length > 6 && (
-              <p className="mt-3 text-xs text-muted-foreground text-center">
-                Press Cmd+Shift+S to view all {templates.length} saved estimations
+              <p className="mt-4 text-xs text-muted-foreground text-center">
+                Press Cmd+Shift+S to view all {templates.length} saved use cases
               </p>
             )}
           </div>
         )}
-
-        <p className="mt-12 text-center text-[18px] text-muted-foreground italic max-w-2xl mx-auto">
-          Lyzr follows a transparent pricing model where customers pay only for Agent Actions, not the underlying LLM or compute cost.
-        </p>
       </div>
     </div>
   );
@@ -200,5 +145,69 @@ function ExampleChip({ text, onClick }: { text: string; onClick: () => void }) {
     >
       {text}
     </button>
+  );
+}
+
+function TemplateCard({ template, onClick }: { template: SavedTemplate; onClick: () => void }) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [svgContent, setSvgContent] = React.useState<string>("");
+
+  React.useEffect(() => {
+    const renderDiagram = async () => {
+      if (!template.architecture.mermaidCode) return;
+      
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "neutral",
+          flowchart: {
+            curve: "basis",
+            padding: 10,
+          },
+          themeVariables: {
+            fontSize: "10px",
+          },
+        });
+
+        const uniqueId = `mermaid-thumb-${template.id}-${Date.now()}`;
+        const { svg } = await mermaid.render(uniqueId, template.architecture.mermaidCode);
+        setSvgContent(svg);
+      } catch (error) {
+        console.error("Mermaid render error:", error);
+      }
+    };
+
+    renderDiagram();
+  }, [template.architecture.mermaidCode, template.id]);
+
+  return (
+    <div
+      className="group relative flex flex-col rounded-xl border border-border bg-card hover:bg-muted/50 hover:border-primary/30 transition-all cursor-pointer overflow-hidden"
+      onClick={onClick}
+    >
+      <div className="h-32 bg-muted/30 border-b border-border flex items-center justify-center overflow-hidden p-2">
+        {svgContent ? (
+          <div
+            ref={containerRef}
+            className="w-full h-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:w-auto [&>svg]:h-auto"
+            dangerouslySetInnerHTML={{ __html: svgContent }}
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">Loading diagram...</div>
+        )}
+      </div>
+      
+      <div className="p-3">
+        <h3 className="font-semibold text-sm mb-1 line-clamp-1">
+          {template.name}
+        </h3>
+        
+        {template.description && (
+          <p className="text-xs text-muted-foreground line-clamp-2">
+            {template.description}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
