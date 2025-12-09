@@ -14,7 +14,9 @@ import {
   CreditCalculation,
   ROICalculation,
   ReviewValidation,
+  SavedTemplate,
 } from "@/lib/types";
+import { SaveTemplateModal } from "@/components/credit-calculator/save-template-modal";
 
 let idCounter = 0;
 function generateId() {
@@ -26,6 +28,7 @@ function generateId() {
 }
 
 const STORAGE_KEY = 'lyzr-credit-calculator-sessions';
+const TEMPLATES_STORAGE_KEY = 'lyzr-credit-calculator-templates';
 
 function loadSessionsFromStorage(): ChatSession[] {
   if (typeof window === 'undefined') return [];
@@ -58,6 +61,32 @@ function saveSessionsToStorage(sessions: ChatSession[]) {
   }
 }
 
+function loadTemplatesFromStorage(): SavedTemplate[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed.map((t: SavedTemplate) => ({
+        ...t,
+        createdAt: new Date(t.createdAt),
+      }));
+    }
+  } catch (e) {
+    console.error('Failed to load templates from storage:', e);
+  }
+  return [];
+}
+
+function saveTemplatesToStorage(templates: SavedTemplate[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates));
+  } catch (e) {
+    console.error('Failed to save templates to storage:', e);
+  }
+}
+
 export default function CreditCalculatorPage() {
   const [sessions, setSessions] = React.useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(null);
@@ -77,14 +106,33 @@ export default function CreditCalculatorPage() {
   });
   const [hasStartedConversation, setHasStartedConversation] = React.useState(false);
   const [isHydrated, setIsHydrated] = React.useState(false);
+  const [templates, setTemplates] = React.useState<SavedTemplate[]>([]);
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = React.useState(false);
 
   React.useEffect(() => {
     const loaded = loadSessionsFromStorage();
     if (loaded.length > 0) {
       setSessions(loaded);
     }
+    const loadedTemplates = loadTemplatesFromStorage();
+    if (loadedTemplates.length > 0) {
+      setTemplates(loadedTemplates);
+    }
     setIsHydrated(true);
   }, []);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (artifactState.architecture && artifactState.credits && artifactState.roi) {
+          setShowSaveTemplateModal(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [artifactState]);
 
   React.useEffect(() => {
     if (isHydrated && sessions.length > 0) {
@@ -152,6 +200,46 @@ export default function CreditCalculatorPage() {
       isLoading: { architecture: false, credits: false, roi: false, review: false },
     });
   }, []);
+
+  const saveTemplate = React.useCallback((name: string, description: string) => {
+    if (!artifactState.architecture || !artifactState.credits || !artifactState.roi) return;
+    
+    const activeSessionData = sessions.find((s) => s.id === activeSessionId);
+    const useCase = activeSessionData?.messages[0]?.content || name;
+    
+    const newTemplate: SavedTemplate = {
+      id: generateId(),
+      name,
+      description,
+      useCase,
+      architecture: artifactState.architecture,
+      credits: artifactState.credits,
+      roi: artifactState.roi,
+      review: artifactState.review,
+      createdAt: new Date(),
+    };
+    
+    const updatedTemplates = [newTemplate, ...templates];
+    setTemplates(updatedTemplates);
+    saveTemplatesToStorage(updatedTemplates);
+  }, [artifactState, activeSessionId, sessions, templates]);
+
+  const loadTemplate = React.useCallback((template: SavedTemplate) => {
+    setHasStartedConversation(true);
+    setArtifactState({
+      architecture: template.architecture,
+      credits: template.credits,
+      roi: template.roi,
+      review: template.review,
+      isLoading: { architecture: false, credits: false, roi: false, review: false },
+    });
+  }, []);
+
+  const deleteTemplate = React.useCallback((templateId: string) => {
+    const updatedTemplates = templates.filter((t) => t.id !== templateId);
+    setTemplates(updatedTemplates);
+    saveTemplatesToStorage(updatedTemplates);
+  }, [templates]);
 
   const sendMessage = React.useCallback(
     async (content: string) => {
@@ -392,6 +480,9 @@ export default function CreditCalculatorPage() {
             <LandingPage
               onSubmit={sendMessage}
               isLoading={isLoading}
+              templates={templates}
+              onLoadTemplate={loadTemplate}
+              onDeleteTemplate={deleteTemplate}
             />
           </div>
         </div>
@@ -426,6 +517,12 @@ export default function CreditCalculatorPage() {
           </div>
         </div>
       </div>
+      <SaveTemplateModal
+        isOpen={showSaveTemplateModal}
+        onClose={() => setShowSaveTemplateModal(false)}
+        onSave={saveTemplate}
+        defaultName={artifactState.architecture?.title || ""}
+      />
     </SidebarProvider>
   );
 }

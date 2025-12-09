@@ -136,3 +136,15 @@ export interface ArtifactState {
     review: boolean;
   };
 }
+
+export interface SavedTemplate {
+  id: string;
+  name: string;
+  description: string;
+  useCase: string;
+  architecture: ArchitectureData;
+  credits: CreditCalculation;
+  roi: ROICalculation;
+  review: ReviewValidation | null;
+  createdAt: Date;
+}

@@ -124,6 +124,19 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-09:** Template Saving & Review Features
+  - Added template saving with Cmd+Shift+S (or Ctrl+Shift+S) keyboard shortcut
+  - Save popup modal for naming templates with optional description
+  - Saved templates displayed on home page with complexity badge, annual cost, and savings %
+  - Click template to load the full calculation results instantly
+  - Delete templates with trash icon on hover
+  - Templates stored in localStorage for persistence
+  - Added Review & Validation step (4th artifact) with 3-iteration auto-limit
+  - Review step validates architecture, credits, and ROI for accuracy
+  - Shows green "Approved" or amber "Needs Revision" status in UI
+  - Questionnaire now keeps selected answers visible after submission
+  - Selected options show with checkmarks instead of disappearing
+
 - **2025-12-02:** Landing Page & Questionnaire UI Polish
   - Shifted hero section upwards (-mt-16) for better visual balance
   - Added subtle italic pricing tagline below examples
