@@ -111,13 +111,28 @@ export interface ROICalculation {
   roi_percentage: number;
 }
 
+export interface ValidationIssue {
+  artifact: "architecture" | "credits" | "roi" | "cross_check";
+  severity: "critical" | "warning";
+  issue: string;
+  expected: string;
+}
+
+export interface ReviewValidation {
+  status: "approved" | "needs_revision";
+  issues: ValidationIssue[];
+  summary: string;
+}
+
 export interface ArtifactState {
   architecture: ArchitectureData | null;
   credits: CreditCalculation | null;
   roi: ROICalculation | null;
+  review: ReviewValidation | null;
   isLoading: {
     architecture: boolean;
     credits: boolean;
     roi: boolean;
+    review: boolean;
   };
 }

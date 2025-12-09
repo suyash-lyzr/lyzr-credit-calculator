@@ -135,7 +135,7 @@ export function ChatInterface({
               </div>
             </div>
           )}
-          
+
           {messages.map((message, index) => (
             <div
               key={message.id}

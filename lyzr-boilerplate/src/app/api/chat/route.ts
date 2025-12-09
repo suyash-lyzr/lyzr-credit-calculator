@@ -315,6 +315,90 @@ Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
       required: ["use_case", "unit_name", "human_analysis", "ai_analysis", "volume_estimates", "comparison", "roi_percentage"],
     },
   },
+  {
+    name: "review_and_validate",
+    description: `You are a Quality Assurance Analyst reviewing the full calculation output for accuracy and business logic consistency.
+
+YOUR ROLE: Act as an independent reviewer who validates ALL THREE artifacts (Architecture, Credits, ROI) against real-world business rules.
+
+CRITICAL VALIDATION CHECKS (Be Honest - Reject if fails):
+
+1. ARCHITECTURE CONSISTENCY CHECKS:
+   - Does N_Agents match the described workflow? (e.g., 3-agent chain should have N_Agents=3, not 1)
+   - Is N_KB=1 when docs/PDFs mentioned, 0 otherwise?
+   - Is N_RAI=1 for Finance/Legal/HR/Public-facing, 0 for internal tools?
+   - Does N_Tools match actual integrations described (OCR, CRM, DB, etc.)?
+   - Does B_API equal actual tool calls per run (NOT agent count)?
+
+2. CREDIT CALCULATION SANITY CHECKS:
+   - Is unit price in expected range? (LOW: $0.10-$0.15, MEDIUM: $0.25-$0.35, HIGH: $0.45-$0.65)
+   - Does complexity match architecture? (Single agent ≠ HIGH complexity)
+   - Are token estimates realistic for use case? (Legal docs = 5k+ tokens, tickets = 1k-2k tokens)
+   - Is 20% buffer applied to ongoing volume but NOT backlog?
+   - For backlog + ongoing: Are there TWO rows in table with combined_total?
+
+3. ROI VALIDATION (CRITICAL - Most Common Errors):
+   - Is savings_percentage between 80-95%? (If <70% or >98%, likely error)
+   - Is mapped_role appropriate for use case? (Contract review = Paralegal, NOT "Admin")
+   - Is time_per_task_minutes realistic? (10min for ticket, 30min for invoice, 60min for contract)
+   - Is fully_loaded_rate = base_wage × 1.3? (Must include 30% overhead)
+   - Does human_yearly_cost = units_per_year × cost_per_unit make sense?
+   - Is AI faster than human? (time_savings_percentage should be 90%+)
+
+4. CROSS-ARTIFACT CONSISTENCY:
+   - Does AI cost_per_unit in ROI match unit_price from Credits?
+   - Does volume in ROI match volume from Credits?
+   - Does architecture complexity justify the credit cost?
+
+DECISION LOGIC:
+- If ALL checks pass → status: "approved", issues: []
+- If ANY check fails → status: "needs_revision", issues: [list specific problems]
+
+BE BRUTALLY HONEST: Don't approve if something looks wrong. It's better to revise once than deliver bad estimates.`,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        status: {
+          type: "string",
+          enum: ["approved", "needs_revision"],
+          description: "Verdict after review",
+        },
+        issues: {
+          type: "array",
+          description: "List of specific problems found (empty if approved)",
+          items: {
+            type: "object",
+            properties: {
+              artifact: {
+                type: "string",
+                enum: ["architecture", "credits", "roi", "cross_check"],
+                description: "Which artifact has the issue",
+              },
+              severity: {
+                type: "string",
+                enum: ["critical", "warning"],
+                description: "Critical = must fix, Warning = recommend fix",
+              },
+              issue: {
+                type: "string",
+                description: "Description of the problem",
+              },
+              expected: {
+                type: "string",
+                description: "What should be correct",
+              },
+            },
+            required: ["artifact", "severity", "issue", "expected"],
+          },
+        },
+        summary: {
+          type: "string",
+          description: "1-2 sentence overall verdict",
+        },
+      },
+      required: ["status", "issues", "summary"],
+    },
+  },
 ];
 
 const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that helps users understand the cost of building AI agents on Lyzr.
@@ -381,6 +465,9 @@ Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
 1. generate_architecture - Analyze use case and determine N variables - Your goal is to build a high level architecture. You expertise in understanding the use case and determining the architecture components required.
 2. calculate_credits - Apply exact formulas to compute costs
 3. calculate_roi - Compare AI vs human costs
+4. review_and_validate - Quality check all outputs for accuracy and business logic
+
+After review, if status="needs_revision", you MUST revise the problematic artifact by calling the appropriate tool again with corrections.
 
 ---
 

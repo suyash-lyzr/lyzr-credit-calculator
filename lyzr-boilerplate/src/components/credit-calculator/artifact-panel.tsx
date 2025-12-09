@@ -4,8 +4,9 @@ import * as React from "react";
 import { ArchitectureDiagram } from "./architecture-diagram";
 import { CreditCalculation } from "./credit-calculation";
 import { ROICalculation } from "./roi-calculation";
+import { ReviewValidation } from "./review-validation";
 import { ArtifactState } from "@/lib/types";
-import { IconBrain, IconCalculator, IconChartBar, IconLoader2, IconCheck } from "@tabler/icons-react";
+import { IconBrain, IconCoins, IconChartBar, IconShieldCheck, IconLoader2, IconCheck } from "@tabler/icons-react";
 
 interface ArtifactPanelProps {
   artifactState: ArtifactState;
@@ -66,16 +67,18 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
     artifactState.architecture ||
     artifactState.credits ||
     artifactState.roi ||
+    artifactState.review ||
     artifactState.isLoading.architecture ||
     artifactState.isLoading.credits ||
-    artifactState.isLoading.roi;
+    artifactState.isLoading.roi ||
+    artifactState.isLoading.review;
 
   React.useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [artifactState.architecture, artifactState.credits, artifactState.roi, 
-      artifactState.isLoading.architecture, artifactState.isLoading.credits, artifactState.isLoading.roi]);
+  }, [artifactState.architecture, artifactState.credits, artifactState.roi, artifactState.review,
+      artifactState.isLoading.architecture, artifactState.isLoading.credits, artifactState.isLoading.roi, artifactState.isLoading.review]);
 
   return (
     <div className="flex h-full flex-col bg-muted/30 rounded-xl border overflow-hidden">
@@ -99,7 +102,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
             </div>
             <h3 className="text-sm font-medium">Calculation Results</h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Your agent architecture, credit costs, and ROI will appear here
+              Your agent architecture, credit costs, ROI, and review will appear here
             </p>
           </div>
         </div>
@@ -149,7 +152,7 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
           )}
 
           {(artifactState.isLoading.roi || artifactState.roi) && (
-            <section>
+            <section className="pb-3 border-b">
               <SectionHeader
                 icon={<IconChartBar className="h-4 w-4 text-primary" />}
                 title="ROI Analysis"
@@ -162,6 +165,26 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
               ) : (
                 <ROICalculation
                   data={artifactState.roi}
+                  isLoading={false}
+                />
+              )}
+            </section>
+          )}
+
+          {(artifactState.isLoading.review || artifactState.review) && (
+            <section>
+              <SectionHeader
+                icon={<IconShieldCheck className="h-4 w-4 text-primary" />}
+                title="Review & Validation"
+                stepNumber={4}
+                isLoading={artifactState.isLoading.review}
+                isComplete={!!artifactState.review}
+              />
+              {artifactState.isLoading.review && !artifactState.review ? (
+                <LoadingPlaceholder message="Reviewing and validating calculations..." />
+              ) : (
+                <ReviewValidation
+                  data={artifactState.review}
                   isLoading={false}
                 />
               )}
