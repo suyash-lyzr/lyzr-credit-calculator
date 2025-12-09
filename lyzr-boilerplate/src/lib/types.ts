@@ -138,13 +138,14 @@ export interface ArtifactState {
 }
 
 export interface SavedTemplate {
-  id: string;
+  id: number;
   name: string;
-  description: string;
+  description: string | null;
   useCase: string;
   architecture: ArchitectureData;
   credits: CreditCalculation;
   roi: ROICalculation;
-  review: ReviewValidation | null;
+  chatHistory: ChatMessage[];
   createdAt: Date;
+  updatedAt: Date;
 }

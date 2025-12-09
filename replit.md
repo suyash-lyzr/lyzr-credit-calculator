@@ -124,13 +124,21 @@ Streaming chat API with Claude tool use and web search.
 - `error`: Error occurred
 
 ## Recent Changes
+- **2025-12-09:** Permanent Database Storage & UI Redesign
+  - Templates now stored in PostgreSQL database (permanent storage)
+  - Chat history saved with templates and restored when loading
+  - Saved templates displayed as 3-column card grid with:
+    - Agent orchestration glimpse (pattern, agents, KB, tools)
+    - Use case heading and description
+    - Complexity badge, annual cost, and savings percentage
+  - Cmd+Shift+S on home page opens template management modal
+  - Cmd+Shift+S during calculation opens save template modal
+  - Removed questionnaire selections from template display
+  - Click any template to load full results with chat history
+
 - **2025-12-09:** Template Saving & Review Features
   - Added template saving with Cmd+Shift+S (or Ctrl+Shift+S) keyboard shortcut
   - Save popup modal for naming templates with optional description
-  - Saved templates displayed on home page with complexity badge, annual cost, and savings %
-  - Click template to load the full calculation results instantly
-  - Delete templates with trash icon on hover
-  - Templates stored in localStorage for persistence
   - Added Review & Validation step (4th artifact) with 3-iteration auto-limit
   - Review step validates architecture, credits, and ROI for accuracy
   - Shows green "Approved" or amber "Needs Revision" status in UI

@@ -17,6 +17,7 @@ import {
   SavedTemplate,
 } from "@/lib/types";
 import { SaveTemplateModal } from "@/components/credit-calculator/save-template-modal";
+import { TemplateManagerModal } from "@/components/credit-calculator/template-manager-modal";
 
 let idCounter = 0;
 function generateId() {
@@ -28,7 +29,6 @@ function generateId() {
 }
 
 const STORAGE_KEY = 'lyzr-credit-calculator-sessions';
-const TEMPLATES_STORAGE_KEY = 'lyzr-credit-calculator-templates';
 
 function loadSessionsFromStorage(): ChatSession[] {
   if (typeof window === 'undefined') return [];
@@ -61,32 +61,6 @@ function saveSessionsToStorage(sessions: ChatSession[]) {
   }
 }
 
-function loadTemplatesFromStorage(): SavedTemplate[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed.map((t: SavedTemplate) => ({
-        ...t,
-        createdAt: new Date(t.createdAt),
-      }));
-    }
-  } catch (e) {
-    console.error('Failed to load templates from storage:', e);
-  }
-  return [];
-}
-
-function saveTemplatesToStorage(templates: SavedTemplate[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templates));
-  } catch (e) {
-    console.error('Failed to save templates to storage:', e);
-  }
-}
-
 export default function CreditCalculatorPage() {
   const [sessions, setSessions] = React.useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(null);
@@ -108,16 +82,30 @@ export default function CreditCalculatorPage() {
   const [isHydrated, setIsHydrated] = React.useState(false);
   const [templates, setTemplates] = React.useState<SavedTemplate[]>([]);
   const [showSaveTemplateModal, setShowSaveTemplateModal] = React.useState(false);
+  const [showTemplateManager, setShowTemplateManager] = React.useState(false);
 
   React.useEffect(() => {
     const loaded = loadSessionsFromStorage();
     if (loaded.length > 0) {
       setSessions(loaded);
     }
-    const loadedTemplates = loadTemplatesFromStorage();
-    if (loadedTemplates.length > 0) {
-      setTemplates(loadedTemplates);
+    
+    async function fetchTemplates() {
+      try {
+        const response = await fetch('/api/templates');
+        if (response.ok) {
+          const data = await response.json();
+          setTemplates(data.map((t: SavedTemplate) => ({
+            ...t,
+            createdAt: new Date(t.createdAt),
+            updatedAt: new Date(t.updatedAt),
+          })));
+        }
+      } catch (e) {
+        console.error('Failed to fetch templates:', e);
+      }
     }
+    fetchTemplates();
     setIsHydrated(true);
   }, []);
 
@@ -125,14 +113,16 @@ export default function CreditCalculatorPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        if (artifactState.architecture && artifactState.credits && artifactState.roi) {
+        if (!hasStartedConversation) {
+          setShowTemplateManager(true);
+        } else if (artifactState.architecture && artifactState.credits && artifactState.roi) {
           setShowSaveTemplateModal(true);
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [artifactState]);
+  }, [artifactState, hasStartedConversation]);
 
   React.useEffect(() => {
     if (isHydrated && sessions.length > 0) {
@@ -201,45 +191,73 @@ export default function CreditCalculatorPage() {
     });
   }, []);
 
-  const saveTemplate = React.useCallback((name: string, description: string) => {
+  const saveTemplate = React.useCallback(async (name: string, description: string) => {
     if (!artifactState.architecture || !artifactState.credits || !artifactState.roi) return;
     
     const activeSessionData = sessions.find((s) => s.id === activeSessionId);
     const useCase = activeSessionData?.messages[0]?.content || name;
+    const chatHistory = activeSessionData?.messages || [];
     
-    const newTemplate: SavedTemplate = {
-      id: generateId(),
-      name,
-      description,
-      useCase,
-      architecture: artifactState.architecture,
-      credits: artifactState.credits,
-      roi: artifactState.roi,
-      review: artifactState.review,
-      createdAt: new Date(),
-    };
-    
-    const updatedTemplates = [newTemplate, ...templates];
-    setTemplates(updatedTemplates);
-    saveTemplatesToStorage(updatedTemplates);
-  }, [artifactState, activeSessionId, sessions, templates]);
+    try {
+      const response = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          useCase,
+          architecture: artifactState.architecture,
+          credits: artifactState.credits,
+          roi: artifactState.roi,
+          chatHistory,
+        }),
+      });
+      
+      if (response.ok) {
+        const newTemplate = await response.json();
+        setTemplates((prev) => [{
+          ...newTemplate,
+          createdAt: new Date(newTemplate.createdAt),
+          updatedAt: new Date(newTemplate.updatedAt),
+        }, ...prev]);
+      }
+    } catch (e) {
+      console.error('Failed to save template:', e);
+    }
+  }, [artifactState, activeSessionId, sessions]);
 
   const loadTemplate = React.useCallback((template: SavedTemplate) => {
+    const newSession: ChatSession = {
+      id: generateId(),
+      title: template.name,
+      messages: template.chatHistory || [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    setSessions((prev) => [newSession, ...prev]);
+    setActiveSessionId(newSession.id);
     setHasStartedConversation(true);
     setArtifactState({
       architecture: template.architecture,
       credits: template.credits,
       roi: template.roi,
-      review: template.review,
+      review: null,
       isLoading: { architecture: false, credits: false, roi: false, review: false },
     });
   }, []);
 
-  const deleteTemplate = React.useCallback((templateId: string) => {
-    const updatedTemplates = templates.filter((t) => t.id !== templateId);
-    setTemplates(updatedTemplates);
-    saveTemplatesToStorage(updatedTemplates);
-  }, [templates]);
+  const deleteTemplate = React.useCallback(async (templateId: number) => {
+    try {
+      const response = await fetch(`/api/templates/${templateId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+      }
+    } catch (e) {
+      console.error('Failed to delete template:', e);
+    }
+  }, []);
 
   const sendMessage = React.useCallback(
     async (content: string) => {
@@ -482,10 +500,16 @@ export default function CreditCalculatorPage() {
               isLoading={isLoading}
               templates={templates}
               onLoadTemplate={loadTemplate}
-              onDeleteTemplate={deleteTemplate}
             />
           </div>
         </div>
+        <TemplateManagerModal
+          isOpen={showTemplateManager}
+          onClose={() => setShowTemplateManager(false)}
+          templates={templates}
+          onLoadTemplate={loadTemplate}
+          onDeleteTemplate={deleteTemplate}
+        />
       </SidebarProvider>
     );
   }
