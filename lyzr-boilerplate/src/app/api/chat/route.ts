@@ -321,61 +321,43 @@ Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
 
 YOUR ROLE: Act as an independent reviewer who validates ALL THREE artifacts (Architecture, Credits, ROI) against real-world business rules and the specific use case context.
 
-CRITICAL VALIDATION CHECKS (Be Honest - Reject if fails):
+=== ABSOLUTE CONFIDENTIALITY IN OUTPUT (CRITICAL) ===
+The "issue" and "expected" fields are shown directly to users. You MUST write them in plain business language WITHOUT revealing:
+- ANY formulas, multipliers, buffers (20%, 1.20, etc.)
+- ANY internal variable names (N_Runs, Cost_Fixed, Cost_Model, B_Mem, etc.)
+- ANY rate card prices or component costs
+- ANY calculation breakdowns or mathematical formulas
 
-1. ARCHITECTURE CONSISTENCY CHECKS:
-   - Does N_Agents match the described workflow complexity and agent count in the diagram?
-   - Is N_KB=1 when documents, PDFs, or knowledge bases are mentioned in the use case, 0 otherwise?
-   - Is N_RAI=1 for regulated domains (Finance/Legal/HR) or public-facing applications, 0 for internal tools?
-   - Does N_Tools match actual external integrations described in the architecture?
-   - Does B_API equal actual tool/API calls per inference run (NOT agent execution count)?
-   - Do the scenario variables (B_Mem, B_KB, B_RAI, B_API) align with the workflow type and use case requirements?
+GOOD issue examples:
+- "The annual volume appears too high for the stated monthly input."
+- "The total cost seems inconsistent with the ROI comparison."
+- "The AI cost per unit doesn't match between the cost and ROI sections."
 
-2. CREDIT CALCULATION SANITY CHECKS:
-   - Is unit price reasonable for the complexity level? Verify against formula: Cost_Inference = Cost_Model + Base_Run + (scenario variable costs)
-   - Does stated complexity match the architecture pattern? (Single agent should be LOW, Orchestrator should be MEDIUM, Multi-agent chains should be HIGH)
-   - Are token estimates appropriate for the use case domain? Consider document length, data complexity, and output requirements based on the specific use case
-   - Is 20% buffer applied ONLY to ongoing monthly volume, NOT to one-time backlog volumes?
-   - For combined workloads (backlog + ongoing): Are there separate rows in the table with a combined_total sum?
-   - Do volume calculations follow the correct formulas? (N_Runs = monthly × 12 × 1.20 for ongoing, exact count for backlog)
+BAD issue examples (NEVER DO THIS):
+- "N_Runs should be 180,000 x 1.20 = 216,000" ← REVEALS FORMULA
+- "Cost_Inference calculation is wrong" ← REVEALS INTERNAL TERMS
+- "The 20% buffer was not applied correctly" ← REVEALS BUFFER
 
-3. ROI VALIDATION (CRITICAL - Most Common Errors):
-   - Is savings_percentage realistic for automation? Typical range is 80-95%, but assess based on task complexity
-   - Is the mapped_role appropriate and specific to the actual use case? (e.g., legal tasks → Paralegal/Legal Assistant, not generic roles)
-   - Is time_per_task_minutes realistic for the specific task type based on industry standards and task complexity?
-   - Is fully_loaded_rate correctly calculated as base_wage × 1.3 to include overhead (benefits, facilities, taxes)?
-   - Does human_yearly_cost calculation make mathematical sense: units_per_year × cost_per_unit?
-   - Is AI demonstrably faster than human processing? (time_savings_percentage should typically be 90%+ for automation)
-   - Are wage sources credible and recent (Bureau of Labor Statistics, Salary.com, Glassdoor)?
+GOOD expected examples:
+- "Total should be approximately $45,000 based on the volume provided."
+- "The figures should align across all sections."
+- "The cost breakdown should reflect the stated complexity level."
 
-4. CROSS-ARTIFACT CONSISTENCY:
-   - Does AI cost_per_unit in ROI exactly match unit_price from Credit Calculation?
-   - Does volume used in ROI match the volume from Credit Calculation?
-   - Does the architecture complexity level justify the credit cost range?
-   - Are all three artifacts telling a coherent story about the same use case?
+BAD expected examples (NEVER DO THIS):
+- "Expected: N_Runs = 180,000 x 1.20 = 216,000" ← REVEALS FORMULA
+- "Cost_Inference should be $0.21 per run" ← REVEALS MICRO-COST
+
+VALIDATION CHECKS (Internal - Use for your analysis, don't reveal in output):
+1. Architecture: Agent count matches workflow, KB/RAI flags correct, tool count accurate
+2. Credits: Unit price reasonable, volume calculations correct, complexity matches pattern
+3. ROI: Savings percentage realistic (80-95%), role mapping appropriate, time estimates reasonable
+4. Cross-check: AI cost matches between Credits and ROI, volumes consistent
 
 DECISION LOGIC:
 - If ALL checks pass → status: "approved", issues: []
-- If ANY check fails → status: "needs_revision", issues: [list specific problems with artifact, severity, issue description, and expected correction]
+- If ANY check fails → status: "needs_revision", issues: [plain language descriptions only]
 
-BE BRUTALLY HONEST: Don't approve if something looks wrong. It's better to revise once than deliver inaccurate estimates. Focus on mathematical correctness, logical consistency, and real-world plausibility for the specific use case.
-
-=== CRITICAL CONFIDENTIALITY FOR SUMMARY ===
-The "summary" field is shown directly to users. NEVER include:
-- Volume calculation formulas or multipliers (20% buffer, 1.20, etc.)
-- Internal pricing details or rate card information
-- References to Cost_Fixed, Cost_Model, Cost_Inference or any formula components
-- Specific calculation steps or breakdowns
-
-GOOD summary examples:
-- "All calculations verified and consistent with the use case requirements."
-- "Architecture and cost estimates align with industry standards for this automation type."
-- "Estimates validated - the agent design matches the workflow complexity."
-
-BAD summary examples (NEVER DO THIS):
-- "Volume calculations correctly apply the 20% buffer..." ← CONFIDENTIAL
-- "Cost_Inference formula verified..." ← CONFIDENTIAL
-- "The 1.20 multiplier is applied correctly..." ← CONFIDENTIAL`,
+Write ALL user-facing text as if explaining to a business executive who knows nothing about the internal calculation system.`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -386,7 +368,7 @@ BAD summary examples (NEVER DO THIS):
         },
         issues: {
           type: "array",
-          description: "List of specific problems found (empty if approved)",
+          description: "List of specific problems found (empty if approved). MUST be written in plain business language without formulas or internal terms.",
           items: {
             type: "object",
             properties: {
@@ -402,11 +384,11 @@ BAD summary examples (NEVER DO THIS):
               },
               issue: {
                 type: "string",
-                description: "Description of the problem",
+                description: "Plain language description of the problem. NO formulas, NO internal terms, NO calculation details.",
               },
               expected: {
                 type: "string",
-                description: "What should be correct",
+                description: "Plain language description of what should be correct. NO formulas, NO internal terms.",
               },
             },
             required: ["artifact", "severity", "issue", "expected"],
@@ -414,7 +396,7 @@ BAD summary examples (NEVER DO THIS):
         },
         summary: {
           type: "string",
-          description: "1-2 sentence overall verdict",
+          description: "1-2 sentence overall verdict in plain business language. NO formulas or internal terms.",
         },
       },
       required: ["status", "issues", "summary"],
