@@ -29,6 +29,16 @@ function generateId() {
 }
 
 const STORAGE_KEY = 'lyzr-credit-calculator-sessions';
+const ARTIFACTS_STORAGE_KEY = 'lyzr-credit-calculator-artifacts';
+
+interface StoredArtifacts {
+  [sessionId: string]: {
+    architecture: ArchitectureData | null;
+    credits: CreditCalculation | null;
+    roi: ROICalculation | null;
+    review: ReviewValidation | null;
+  };
+}
 
 function loadSessionsFromStorage(): ChatSession[] {
   if (typeof window === 'undefined') return [];
@@ -59,6 +69,45 @@ function saveSessionsToStorage(sessions: ChatSession[]) {
   } catch (e) {
     console.error('Failed to save sessions to storage:', e);
   }
+}
+
+function loadArtifactsFromStorage(): StoredArtifacts {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(ARTIFACTS_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load artifacts from storage:', e);
+  }
+  return {};
+}
+
+function saveArtifactsToStorage(artifacts: StoredArtifacts) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ARTIFACTS_STORAGE_KEY, JSON.stringify(artifacts));
+  } catch (e) {
+    console.error('Failed to save artifacts to storage:', e);
+  }
+}
+
+function getSessionArtifacts(sessionId: string): { architecture: ArchitectureData | null; credits: CreditCalculation | null; roi: ROICalculation | null; review: ReviewValidation | null } {
+  const all = loadArtifactsFromStorage();
+  return all[sessionId] || { architecture: null, credits: null, roi: null, review: null };
+}
+
+function saveSessionArtifacts(sessionId: string, artifacts: { architecture: ArchitectureData | null; credits: CreditCalculation | null; roi: ROICalculation | null; review: ReviewValidation | null }) {
+  const all = loadArtifactsFromStorage();
+  all[sessionId] = artifacts;
+  saveArtifactsToStorage(all);
+}
+
+function deleteSessionArtifacts(sessionId: string) {
+  const all = loadArtifactsFromStorage();
+  delete all[sessionId];
+  saveArtifactsToStorage(all);
 }
 
 export default function CreditCalculatorPage() {
@@ -130,6 +179,17 @@ export default function CreditCalculatorPage() {
     }
   }, [sessions, isHydrated]);
 
+  React.useEffect(() => {
+    if (isHydrated && activeSessionId && (artifactState.architecture || artifactState.credits || artifactState.roi || artifactState.review)) {
+      saveSessionArtifacts(activeSessionId, {
+        architecture: artifactState.architecture,
+        credits: artifactState.credits,
+        roi: artifactState.roi,
+        review: artifactState.review,
+      });
+    }
+  }, [isHydrated, activeSessionId, artifactState.architecture, artifactState.credits, artifactState.roi, artifactState.review]);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   const createNewSession = React.useCallback(() => {
@@ -154,11 +214,12 @@ export default function CreditCalculatorPage() {
   const selectSession = React.useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
     setHasStartedConversation(true);
+    const savedArtifacts = getSessionArtifacts(sessionId);
     setArtifactState({
-      architecture: null,
-      credits: null,
-      roi: null,
-      review: null,
+      architecture: savedArtifacts.architecture,
+      credits: savedArtifacts.credits,
+      roi: savedArtifacts.roi,
+      review: savedArtifacts.review,
       isLoading: { architecture: false, credits: false, roi: false, review: false },
     });
   }, []);
@@ -166,6 +227,7 @@ export default function CreditCalculatorPage() {
   const deleteSession = React.useCallback(
     (sessionId: string) => {
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      deleteSessionArtifacts(sessionId);
       if (activeSessionId === sessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
