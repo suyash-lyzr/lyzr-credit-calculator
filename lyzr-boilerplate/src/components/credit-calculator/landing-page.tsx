@@ -52,7 +52,7 @@ export function LandingPage({
 
   return (
     <div className="w-full bg-background overflow-y-auto h-screen">
-      <div className="min-h-[85vh] flex items-center justify-center">
+      <div className="min-h-[70vh] flex items-center justify-center">
         <div className="w-full max-w-4xl px-6 py-8 -mt-16">
           <div className="flex flex-col items-center text-center mb-10">
             <Image
