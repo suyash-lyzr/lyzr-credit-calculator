@@ -202,9 +202,9 @@ function TemplateCard({ template, onClick }: { template: SavedTemplate; onClick:
           {template.name}
         </h3>
         
-        {template.description && (
+        {template.architecture.summary && (
           <p className="text-xs text-muted-foreground line-clamp-2">
-            {template.description}
+            {template.architecture.summary}
           </p>
         )}
       </div>
