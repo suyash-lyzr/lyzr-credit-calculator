@@ -66,16 +66,16 @@ export function ChatInterface({
     }
   };
 
-  const handleQuestionnaireSubmit = (responses: Record<string, string | string[]>) => {
+  const handleQuestionnaireSubmit = (responses: Record<string, string | string[]>, questions: { id: string; question: string }[]) => {
     const formattedParts: string[] = [];
-    Object.entries(responses).forEach(([, value]) => {
-      if (Array.isArray(value)) {
-        formattedParts.push(value.join(", "));
-      } else {
-        formattedParts.push(value);
+    questions.forEach((q) => {
+      const value = responses[q.id];
+      if (value) {
+        const answerText = Array.isArray(value) ? value.join(", ") : value;
+        formattedParts.push(`${q.question}: ${answerText}`);
       }
     });
-    const message = `My selections: ${formattedParts.join(" | ")}`;
+    const message = `My selections:\n${formattedParts.join("\n")}`;
     onSendMessage(message);
   };
 

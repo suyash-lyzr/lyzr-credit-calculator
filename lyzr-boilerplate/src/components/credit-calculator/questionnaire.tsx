@@ -23,7 +23,7 @@ interface QuestionnaireData {
 
 interface QuestionnaireProps {
   data: QuestionnaireData;
-  onSubmit: (responses: Record<string, string | string[]>) => void;
+  onSubmit: (responses: Record<string, string | string[]>, questions: { id: string; question: string }[]) => void;
   isLoading?: boolean;
 }
 
@@ -46,18 +46,7 @@ export function Questionnaire({ data, onSubmit, isLoading }: QuestionnaireProps)
   };
 
   const handleSubmit = () => {
-    const formattedResponses: string[] = [];
-    data.questions.forEach((q) => {
-      const answer = responses[q.id];
-      if (answer) {
-        if (Array.isArray(answer)) {
-          formattedResponses.push(`${q.question}: ${answer.join(", ")}`);
-        } else {
-          formattedResponses.push(`${q.question}: ${answer}`);
-        }
-      }
-    });
-    onSubmit(responses);
+    onSubmit(responses, data.questions.map(q => ({ id: q.id, question: q.question })));
   };
 
   const isComplete = data.questions.every((q) => {
