@@ -157,34 +157,35 @@ For every agent (planner, worker, classifier, extractor, etc.) determine:
 
 --- STEP B: Pick the cheapest model that clears the quality bar ---
 
-Latest 2026 provider rates (USD per 1M tokens, fully public, NO markup):
+Latest May 2026 provider rates (USD per 1M tokens, fully public, NO markup):
 
-| Agent Role                                       | Recommended Model      | Provider  | Input  | Output | Ctx   |
-|--------------------------------------------------|------------------------|-----------|--------|--------|-------|
-| Routing, classification, simple extraction       | GPT-4.1 Nano           | OpenAI    | 0.10   | 0.40   | 1M    |
-| High-volume cheap workers (alt)                  | Gemini 2.5 Flash-Lite  | Google    | 0.10   | 0.40   | 1M    |
-| Standard chat, RAG, customer support             | GPT-5 Mini             | OpenAI    | 0.25   | 2.00   | 272K  |
-| Standard chat / multimodal (alt)                 | Gemini 2.5 Flash       | Google    | 0.30   | 2.50   | 1M    |
-| Structured extraction, strong instruction follow | Claude Haiku 4.5       | Anthropic | 1.00   | 5.00   | 200K  |
-| Long-document analysis (contracts, PDFs, code)   | GPT-4.1                | OpenAI    | 2.00   | 8.00   | 1M    |
-| Long-context multimodal analysis                 | Gemini 2.5 Pro (≤200K) | Google    | 1.25   | 10.00  | 1M    |
-| Long-context multimodal (>200K input)            | Gemini 2.5 Pro (>200K) | Google    | 2.50   | 15.00  | 1M    |
-| Complex reasoning, multi-step orchestration      | GPT-5                  | OpenAI    | 1.25   | 10.00  | 272K  |
-| Math / logic / scientific reasoning              | o3                     | OpenAI    | 2.00   | 8.00   | 200K  |
-| Budget reasoning (alt to o3)                     | o4-mini                | OpenAI    | 1.10   | 4.40   | 200K  |
-| Production coding / high-quality RAG             | Claude Sonnet 4.6      | Anthropic | 3.00   | 15.00  | 1M    |
-| Frontier autonomous coding / agentic loops       | Claude Opus 4.7        | Anthropic | 5.00   | 25.00  | 1M    |
+| Agent Role                                          | Recommended Model         | Provider  | Input  | Output | Ctx   |
+|-----------------------------------------------------|---------------------------|-----------|--------|--------|-------|
+| Cheapest routing / classification / extraction      | GPT-5.4 Nano              | OpenAI    | 0.20   | 1.25   | 272K  |
+| Ultra-cheap workers (alt)                           | Gemini 3.1 Flash-Lite     | Google    | 0.25   | 1.50   | 1M    |
+| Budget reasoning (math, logic, structured thinking) | o4-mini                   | OpenAI    | 0.55   | 2.20   | 200K  |
+| Standard chat, RAG, customer support                | Gemini 3 Flash            | Google    | 0.50   | 3.00   | 1M    |
+| Structured extraction, strong instruction follow    | Claude Haiku 4.5          | Anthropic | 1.00   | 5.00   | 200K  |
+| Reasoning workhorse (best balance)                  | o3                        | OpenAI    | 2.00   | 8.00   | 200K  |
+| Long-context multimodal (≤200K input)               | Gemini 3.1 Pro            | Google    | 2.00   | 12.00  | 2M    |
+| Long-context multimodal (>200K input)               | Gemini 3.1 Pro            | Google    | 4.00   | 18.00  | 2M    |
+| Standard general agent (≤272K context)              | GPT-5.4                   | OpenAI    | 2.50   | 15.00  | 272K  |
+| GPT-5.4 long-context (>272K input)                  | GPT-5.4                   | OpenAI    | 5.00   | 22.50  | —     |
+| Production coding, high-quality RAG, critic         | Claude Sonnet 4.6         | Anthropic | 3.00   | 15.00  | 1M    |
+| Frontier autonomous coding / agentic loops          | Claude Opus 4.7           | Anthropic | 5.00   | 25.00  | 1M    |
+| Hardest 5% of reasoning problems (use sparingly)    | o3-pro                    | OpenAI    | 20.00  | 80.00  | 200K  |
 
 --- STEP C: MIX models in multi-agent architectures ---
 
 Don't use one model everywhere. A typical multi-agent system looks like:
-  • Triage / router agent  → GPT-4.1 Nano or Gemini 2.5 Flash-Lite (cheap)
-  • Extraction / worker agents → GPT-5 Mini or Claude Haiku 4.5 (mid-tier)
-  • RAG / Q&A agent → GPT-5 Mini or Gemini 2.5 Flash
-  • Long-doc analyzer → GPT-4.1 (1M context, cheap input)
-  • Orchestrator / planner → GPT-5 or Claude Sonnet 4.6
-  • Critic / reviewer → Claude Sonnet 4.6 (best instruction following)
-  • ONLY use Opus 4.7 / o3 when frontier reasoning truly needed (high stakes, autonomous)
+  • Triage / router agent     → GPT-5.4 Nano or Gemini 3.1 Flash-Lite (cheap)
+  • Extraction / worker agents → Claude Haiku 4.5 or Gemini 3 Flash (mid-tier)
+  • RAG / Q&A agent           → Gemini 3 Flash or GPT-5.4 Nano
+  • Reasoning / validator     → o4-mini (cheap) or o3 (workhorse)
+  • Long-doc analyzer         → Gemini 3.1 Pro (2M context, multimodal)
+  • Orchestrator / planner    → GPT-5.4 or Claude Sonnet 4.6
+  • Critic / reviewer         → Claude Sonnet 4.6 (best instruction following)
+  • ONLY use Opus 4.7 / o3-pro when frontier reasoning truly needed (high stakes, autonomous)
 
 --- STEP D: Estimate tokens per run by task type ---
 
@@ -280,7 +281,7 @@ If user has both backlog and ongoing volume, populate "rows" array:
           items: {
             type: "object",
             properties: {
-              model_name: { type: "string", description: "Latest model name, e.g., 'GPT-5 Mini', 'GPT-4.1', 'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'" },
+              model_name: { type: "string", description: "Latest May 2026 model name, e.g., 'GPT-5.4 Nano', 'GPT-5.4', 'o3', 'o4-mini', 'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Claude Opus 4.7', 'Gemini 3 Flash', 'Gemini 3.1 Pro', 'Gemini 3.1 Flash-Lite'" },
               provider: { type: "string", description: "OpenAI | Anthropic | Google" },
               runs_using_model: { type: "number", description: "Annual runs that use this model" },
               avg_input_tokens: { type: "number" },
@@ -620,27 +621,27 @@ total_annual_cost = lyzr_annual_cost + llm_annual_cost
 - ONGOING (monthly): unit_volume = monthly_volume × 12.
 - COMBINED: use "rows" array with both workloads.
 
-## LLM MODEL SELECTION FRAMEWORK (LATEST 2026 RATES, PASS-THROUGH, NO MARKUP)
+## LLM MODEL SELECTION FRAMEWORK (LATEST MAY 2026 RATES, PASS-THROUGH, NO MARKUP)
 
 Pick the cheapest model that clears each agent's quality bar. Mix models across agents — never use one model for everything.
 
-| Agent Role                                       | Recommended Model      | Provider  | Input  | Output | Ctx   |
-|--------------------------------------------------|------------------------|-----------|--------|--------|-------|
-| Routing, classification, simple extraction       | GPT-4.1 Nano           | OpenAI    | 0.10   | 0.40   | 1M    |
-| High-volume cheap workers (alt)                  | Gemini 2.5 Flash-Lite  | Google    | 0.10   | 0.40   | 1M    |
-| Standard chat, RAG, customer support             | GPT-5 Mini             | OpenAI    | 0.25   | 2.00   | 272K  |
-| Standard chat / multimodal (alt)                 | Gemini 2.5 Flash       | Google    | 0.30   | 2.50   | 1M    |
-| Structured extraction, strong instruction follow | Claude Haiku 4.5       | Anthropic | 1.00   | 5.00   | 200K  |
-| Long-document analysis (contracts, PDFs, code)   | GPT-4.1                | OpenAI    | 2.00   | 8.00   | 1M    |
-| Long-context multimodal (≤200K input)            | Gemini 2.5 Pro         | Google    | 1.25   | 10.00  | 1M    |
-| Long-context multimodal (>200K input)            | Gemini 2.5 Pro         | Google    | 2.50   | 15.00  | 1M    |
-| Complex reasoning, multi-step orchestration      | GPT-5                  | OpenAI    | 1.25   | 10.00  | 272K  |
-| Math / logic / scientific reasoning              | o3                     | OpenAI    | 2.00   | 8.00   | 200K  |
-| Budget reasoning (alt to o3)                     | o4-mini                | OpenAI    | 1.10   | 4.40   | 200K  |
-| Production coding / high-quality RAG             | Claude Sonnet 4.6      | Anthropic | 3.00   | 15.00  | 1M    |
-| Frontier autonomous coding / agentic loops       | Claude Opus 4.7        | Anthropic | 5.00   | 25.00  | 1M    |
+| Agent Role                                          | Recommended Model         | Provider  | Input  | Output | Ctx   |
+|-----------------------------------------------------|---------------------------|-----------|--------|--------|-------|
+| Cheapest routing / classification / extraction      | GPT-5.4 Nano              | OpenAI    | 0.20   | 1.25   | 272K  |
+| Ultra-cheap workers (alt)                           | Gemini 3.1 Flash-Lite     | Google    | 0.25   | 1.50   | 1M    |
+| Budget reasoning (math, logic, structured thinking) | o4-mini                   | OpenAI    | 0.55   | 2.20   | 200K  |
+| Standard chat, RAG, customer support                | Gemini 3 Flash            | Google    | 0.50   | 3.00   | 1M    |
+| Structured extraction, strong instruction follow    | Claude Haiku 4.5          | Anthropic | 1.00   | 5.00   | 200K  |
+| Reasoning workhorse (best balance)                  | o3                        | OpenAI    | 2.00   | 8.00   | 200K  |
+| Long-context multimodal (≤200K input)               | Gemini 3.1 Pro            | Google    | 2.00   | 12.00  | 2M    |
+| Long-context multimodal (>200K input)               | Gemini 3.1 Pro            | Google    | 4.00   | 18.00  | 2M    |
+| Standard general agent (≤272K context)              | GPT-5.4                   | OpenAI    | 2.50   | 15.00  | 272K  |
+| GPT-5.4 long-context (>272K input)                  | GPT-5.4                   | OpenAI    | 5.00   | 22.50  | —     |
+| Production coding, high-quality RAG, critic         | Claude Sonnet 4.6         | Anthropic | 3.00   | 15.00  | 1M    |
+| Frontier autonomous coding / agentic loops          | Claude Opus 4.7           | Anthropic | 5.00   | 25.00  | 1M    |
+| Hardest 5% of reasoning problems (use sparingly)    | o3-pro                    | OpenAI    | 20.00  | 80.00  | 200K  |
 
-Typical multi-agent mix: triage → Nano/Flash-Lite • workers → GPT-5 Mini/Haiku 4.5 • orchestrator → GPT-5/Sonnet 4.6 • long-doc → GPT-4.1 • only use Opus 4.7 / o3 when frontier reasoning is truly needed.
+Typical multi-agent mix: triage → GPT-5.4 Nano / Gemini 3.1 Flash-Lite • workers → Haiku 4.5 / Gemini 3 Flash • reasoning → o4-mini or o3 • long-doc → Gemini 3.1 Pro (2M ctx) • orchestrator → GPT-5.4 / Sonnet 4.6 • only use Opus 4.7 / o3-pro when frontier reasoning truly needed.
 
 Token estimates per run:
 - Routing / classification:                 600 in /   150 out
