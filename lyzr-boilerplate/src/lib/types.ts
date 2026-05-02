@@ -54,6 +54,23 @@ export interface LLMModelBreakdown {
   annual_cost: number;
 }
 
+export interface LlmStep {
+  step_name: string;
+  action: string;
+  runs_per_unit: number;
+  model_name: string;
+  provider: string;
+  model_rationale: string;
+  input_tokens: number;
+  output_tokens: number;
+  input_rate_per_1m: number;
+  output_rate_per_1m: number;
+  cost_per_call: number;
+  cost_per_unit: number;
+  annual_calls: number;
+  annual_cost: number;
+}
+
 export interface WorkloadRow {
   workload_name: string;
   runs_per_unit: number;
@@ -79,7 +96,10 @@ export interface CreditCalculation {
 
   lyzr_annual_cost: number;
 
-  llm_breakdown: LLMModelBreakdown[];
+  llm_steps?: LlmStep[];
+  llm_buffer_pct?: number;
+  llm_per_unit_cost?: number;
+  llm_breakdown?: LLMModelBreakdown[];
   llm_annual_cost: number;
   llm_note?: string;
 

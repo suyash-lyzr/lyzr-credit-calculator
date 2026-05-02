@@ -199,7 +199,29 @@ Don't use one model everywhere. A typical multi-agent system looks like:
 
 Adjust based on actual KB context size and conversational vs transactional nature.
 
-Each model used in the architecture MUST appear as a separate row in llm_breakdown with its share of runs (runs_using_model). The sum of runs_using_model across rows should equal total_annual_runs.
+--- STEP E: Build the detailed LLM step table (llm_steps) ---
+
+You MUST emit ONE row in llm_steps for EVERY step in runs_breakdown. This is the canonical, customer-visible LLM breakdown — vague aggregations are not acceptable.
+
+For each step:
+  • step_name           → MUST exactly match the step_name in runs_breakdown
+  • action              → 1 sentence on what the LLM is doing in that step
+  • runs_per_unit       → usually equals the "runs" value of the matching runs_breakdown step (split if a step uses multiple models — emit one row per model)
+  • model_name + provider → pick from the May 2026 lineup using STEPS A-C (cheapest model that clears the bar for THIS step). DO NOT use one model everywhere.
+  • model_rationale     → 1 short sentence explaining the choice (e.g., "Routing only — Nano is enough", "Long contract context needs 2M ctx Pro")
+  • input_tokens / output_tokens → average per LLM call for THAT step (use Step D table, adjusted for KB context)
+  • input_rate_per_1m / output_rate_per_1m → from the pricing table above for the chosen model
+  • cost_per_call       = (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000
+  • cost_per_unit       = cost_per_call × runs_per_unit
+  • annual_calls        = runs_per_unit × unit_volume × (1 + llm_buffer_pct / 100)
+  • annual_cost         = annual_calls × cost_per_call
+
+llm_buffer_pct: 30-50% (separate from agent-run iteration_buffer_pct). LLM buffer accounts for retries, self-correction loops, multi-sample generation, and tool-use iterations WITHIN a single agent run.
+
+llm_per_unit_cost = sum of cost_per_unit across all llm_steps
+llm_annual_cost   = sum of annual_cost across all llm_steps
+
+llm_breakdown (per-model rollup) is OPTIONAL — only fill it if it adds clarity, otherwise omit.
 
 === VOLUME RULES ===
 
@@ -216,7 +238,7 @@ total_annual_runs = unit_volume × runs_per_unit × (1 + iteration_buffer_pct/10
 rate_per_run = 0.08 (cloud) OR 0.03 (vpc) - default to cloud unless user says otherwise.
 
 lyzr_annual_cost = total_annual_runs × rate_per_run
-llm_annual_cost  = sum of (runs_using_model × ((avg_input_tokens × input_rate / 1M) + (avg_output_tokens × output_rate / 1M)))
+llm_annual_cost  = sum of llm_steps[i].annual_cost  (each row = annual_calls × cost_per_call)
 total_annual_cost = lyzr_annual_cost + llm_annual_cost
 
 === MULTIPLE WORKLOADS ===
@@ -229,7 +251,9 @@ If user has both backlog and ongoing volume, populate "rows" array:
   combined_lyzr_total = sum of row lyzr_cost
   combined_llm_total = sum of row llm_cost
   combined_total = combined_lyzr_total + combined_llm_total
-  combined_note = brief explanation`,
+  combined_note = brief explanation
+
+In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps table footer (sum of annual_cost) reconciles exactly with combined_llm_total. Use the same runs_per_unit assumption that applies across the consolidated workload (or the volume-weighted average if backlog vs ongoing differ).`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -275,19 +299,53 @@ If user has both backlog and ongoing volume, populate "rows" array:
           description: "= total_annual_runs × rate_per_run",
         },
 
-        llm_breakdown: {
+        llm_steps: {
           type: "array",
-          description: "Break down LLM cost per model used in the architecture",
+          description: "DETAILED per-step LLM breakdown. ONE row per agent reasoning step in runs_breakdown. Each row picks the most suitable model for THAT step and shows tokens, rates, and cost.",
           items: {
             type: "object",
             properties: {
+              step_name: { type: "string", description: "MUST match a step_name from runs_breakdown (e.g., 'Triage', 'Extract Fields', 'Validate')" },
+              action: { type: "string", description: "1 sentence describing what the LLM is doing in this step (e.g., 'Classify ticket intent and route', 'Extract structured invoice fields')" },
+              runs_per_unit: { type: "number", description: "How many LLM calls this step contributes per business unit (usually = the runs value from runs_breakdown for this step)" },
               model_name: { type: "string", description: "Latest May 2026 model name, e.g., 'GPT-5.4 Nano', 'GPT-5.4', 'o3', 'o4-mini', 'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Claude Opus 4.7', 'Gemini 3 Flash', 'Gemini 3.1 Pro', 'Gemini 3.1 Flash-Lite'" },
               provider: { type: "string", description: "OpenAI | Anthropic | Google" },
-              runs_using_model: { type: "number", description: "Annual runs that use this model" },
+              model_rationale: { type: "string", description: "1 short sentence on why THIS model for THIS step (e.g., 'Cheap classification — Nano is enough', 'Long-context contract analysis needs 1M ctx')" },
+              input_tokens: { type: "number", description: "Average input tokens per LLM call for this step" },
+              output_tokens: { type: "number", description: "Average output tokens per LLM call for this step" },
+              input_rate_per_1m: { type: "number", description: "USD per 1M input tokens for the chosen model (provider rate, no markup)" },
+              output_rate_per_1m: { type: "number", description: "USD per 1M output tokens for the chosen model (provider rate, no markup)" },
+              cost_per_call: { type: "number", description: "= (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000" },
+              cost_per_unit: { type: "number", description: "= cost_per_call × runs_per_unit" },
+              annual_calls: { type: "number", description: "= runs_per_unit × unit_volume × (1 + llm_buffer_pct/100)" },
+              annual_cost: { type: "number", description: "= annual_calls × cost_per_call" },
+            },
+            required: [
+              "step_name", "action", "runs_per_unit", "model_name", "provider",
+              "model_rationale",
+              "input_tokens", "output_tokens", "input_rate_per_1m", "output_rate_per_1m",
+              "cost_per_call", "cost_per_unit", "annual_calls", "annual_cost",
+            ],
+          },
+        },
+        llm_buffer_pct: {
+          type: "number",
+          description: "Separate iteration buffer for LLM calls (30-50% typical). Accounts for retries, self-correction loops, multiple samples per agent run, and tool-use iterations within a single agent run.",
+        },
+        llm_per_unit_cost: { type: "number", description: "Sum of cost_per_unit across all llm_steps (LLM cost to process ONE business unit)" },
+        llm_breakdown: {
+          type: "array",
+          description: "OPTIONAL rollup per model (sum of llm_steps grouped by model_name). Provide if useful, otherwise omit.",
+          items: {
+            type: "object",
+            properties: {
+              model_name: { type: "string" },
+              provider: { type: "string" },
+              runs_using_model: { type: "number" },
               avg_input_tokens: { type: "number" },
               avg_output_tokens: { type: "number" },
-              input_rate_per_1m: { type: "number", description: "USD per 1M input tokens (provider rate, no markup)" },
-              output_rate_per_1m: { type: "number", description: "USD per 1M output tokens (provider rate, no markup)" },
+              input_rate_per_1m: { type: "number" },
+              output_rate_per_1m: { type: "number" },
               annual_cost: { type: "number" },
             },
             required: [
@@ -296,7 +354,7 @@ If user has both backlog and ongoing volume, populate "rows" array:
             ],
           },
         },
-        llm_annual_cost: { type: "number", description: "Sum of all llm_breakdown annual_cost values" },
+        llm_annual_cost: { type: "number", description: "Sum of annual_cost across all llm_steps" },
         llm_note: {
           type: "string",
           description: "e.g., 'Pass-through to providers at public rates. Customer billed directly.'",
@@ -333,7 +391,8 @@ If user has both backlog and ongoing volume, populate "rows" array:
         "agent_architecture_summary", "deployment", "rate_per_run",
         "workload_name", "unit_volume", "runs_per_unit", "runs_breakdown",
         "iteration_buffer_pct", "total_annual_runs",
-        "lyzr_annual_cost", "llm_breakdown", "llm_annual_cost",
+        "lyzr_annual_cost",
+        "llm_steps", "llm_buffer_pct", "llm_per_unit_cost", "llm_annual_cost",
         "total_annual_cost",
       ],
     },
@@ -633,8 +692,13 @@ total_annual_runs = unit_volume × runs_per_unit × (1 + iteration_buffer_pct/10
 rate_per_run = 0.08 (Cloud) or 0.03 (VPC)
 lyzr_annual_cost = total_annual_runs × rate_per_run
 
-llm_annual_cost (per model) = runs_using_model × ((avg_input_tokens × input_rate / 1M) + (avg_output_tokens × output_rate / 1M))
-Sum across all models for total LLM pass-through.
+LLM cost is computed PER STEP via llm_steps (canonical):
+  cost_per_call    = (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000
+  cost_per_unit    = cost_per_call × runs_per_unit
+  annual_calls     = runs_per_unit × unit_volume × (1 + llm_buffer_pct / 100)
+  annual_cost      = annual_calls × cost_per_call
+  llm_per_unit_cost = sum of cost_per_unit across all llm_steps
+  llm_annual_cost   = sum of annual_cost across all llm_steps
 
 total_annual_cost = lyzr_annual_cost + llm_annual_cost
 
@@ -673,7 +737,17 @@ Token estimates per run:
 - Long-doc analysis (legal / research):  10,000 in / 1,500 out
 - Very long context (full case/codebase):50,000 in / 2,000 out
 
-Each model used MUST appear as a separate row in llm_breakdown. Sum of runs_using_model across rows should equal total_annual_runs.
+## LLM_STEPS — DETAILED PER-STEP TABLE (REQUIRED, CANONICAL)
+
+You MUST emit ONE row in llm_steps for EVERY step in runs_breakdown. Per-step model selection (with rationale) is the customer-facing detail — do NOT collapse into vague aggregates.
+
+For each step provide: step_name (matches runs_breakdown), action, runs_per_unit, model_name, provider, model_rationale (REQUIRED — 1 sentence on why THIS model for THIS step), input_tokens, output_tokens, input_rate_per_1m, output_rate_per_1m, cost_per_call, cost_per_unit, annual_calls, annual_cost.
+
+llm_buffer_pct (30-50%): SEPARATE iteration buffer for LLM calls — accounts for retries, self-correction, multi-sample generation, tool-use iterations within a single agent run.
+
+MULTI-WORKLOAD (rows[] populated): the llm_steps table is computed for ONE consolidated unit_volume = sum of all rows[].volume so footer totals reconcile with combined_llm_total. Set unit_volume to that combined sum.
+
+llm_breakdown (per-model rollup) is OPTIONAL — only include if it adds clarity.
 
 ## OUTPUT GUIDELINES
 
