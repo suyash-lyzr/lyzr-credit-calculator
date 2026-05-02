@@ -15,6 +15,8 @@ The user interface transitions from a simple landing page to a 40-60 split layou
 
 The core pricing model is based on Agent Runs, with two deployment options: Lyzr Cloud ($0.08 per agent run) and Lyzr VPC / On-Prem ($0.03 per agent run). LLM costs are pass-through without markup. Agent runs are defined as one invocation of an agent performing a discrete reasoning task. The system includes tools for generating architecture diagrams (`generate_architecture`), calculating credits (`calculate_credits`), performing web searches for labor rates (`web_search`), calculating ROI (`calculate_roi`), and reviewing/validating artifacts (`review_and_validate`).
 
+LLM cost estimation uses a 4-step framework codified in the system prompt: (A) classify each agent by task type, context size, volume, and quality bar; (B) pick the cheapest model that clears the quality bar from the latest 2026 lineup (OpenAI GPT-4.1 Nano/Mini/GPT-4.1/GPT-5 Mini/GPT-5/o3/o4-mini, Anthropic Claude Haiku 4.5/Sonnet 4.6/Opus 4.7, Google Gemini 2.5 Flash-Lite/Flash/Pro); (C) mix models across agents in multi-agent architectures (cheap routers, mid-tier workers, strong orchestrators); (D) estimate tokens per run by task type. Provider rates are baked into the prompt and updated for May 2026.
+
 The application features a streaming API (`/api/chat`) for real-time text output and tool execution, using Server-Sent Events (SSE).
 
 ## External Dependencies

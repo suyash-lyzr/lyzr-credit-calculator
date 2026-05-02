@@ -145,25 +145,60 @@ Step 4: Add ITERATION BUFFER (30-50% over baseline).
 
 === LLM COST ESTIMATION (PASS-THROUGH, SHOWN SEPARATELY) ===
 
-Estimate average tokens per run based on architecture and use case. Use these provider rates (NO markup, these are real public rates):
+You MUST follow this 4-step framework. Do not just pick "GPT-4o for everything" — that is wasteful.
 
-| Model              | Provider  | Input ($/1M) | Output ($/1M) | Use For                       |
-|--------------------|-----------|--------------|---------------|-------------------------------|
-| GPT-4o-mini        | OpenAI    | 0.15         | 0.60          | Simple/routing tasks (LOW)    |
-| GPT-4o             | OpenAI    | 2.50         | 10.00         | Standard agents (MEDIUM)      |
-| Claude Haiku 4.5   | Anthropic | 1.00         | 5.00          | Fast structured tasks         |
-| Claude Sonnet 4.5  | Anthropic | 3.00         | 15.00         | Standard reasoning (MEDIUM)   |
-| Claude Opus 4.5    | Anthropic | 15.00        | 75.00         | Complex orchestrators (HIGH)  |
-| Gemini 2.0 Flash   | Google    | 0.10         | 0.40          | High-volume simple (LOW)      |
+--- STEP A: Classify each agent in the architecture ---
 
-Token estimation guidance:
-- LOW complexity / simple chat: 800 in / 200 out per run
-- MEDIUM / standard agents: 2,000 in / 500 out per run
-- HIGH / orchestrators with KB context: 4,000 in / 1,000 out per run
-- Document-heavy (legal contracts, long PDFs): 8,000-15,000 in / 1,500 out per run
-- Adjust based on use case domain, KB usage, and conversational vs transactional nature.
+For every agent (planner, worker, classifier, extractor, etc.) determine:
+  • Task type: ROUTING/EXTRACTION (deterministic, narrow), CHAT/RAG (conversational), LONG-DOC (>20K input tokens), REASONING (multi-step planning, math, code), or FRONTIER (autonomous, high-stakes)
+  • Context size per call: <8K, 8-100K, 100K-1M
+  • Volume: high (>100K runs/yr), medium, low
+  • Quality bar: production-critical vs best-effort
 
-If different agents in the architecture use different models, list each model in llm_breakdown with its share of runs.
+--- STEP B: Pick the cheapest model that clears the quality bar ---
+
+Latest 2026 provider rates (USD per 1M tokens, fully public, NO markup):
+
+| Agent Role                                       | Recommended Model      | Provider  | Input  | Output | Ctx   |
+|--------------------------------------------------|------------------------|-----------|--------|--------|-------|
+| Routing, classification, simple extraction       | GPT-4.1 Nano           | OpenAI    | 0.10   | 0.40   | 1M    |
+| High-volume cheap workers (alt)                  | Gemini 2.5 Flash-Lite  | Google    | 0.10   | 0.40   | 1M    |
+| Standard chat, RAG, customer support             | GPT-5 Mini             | OpenAI    | 0.25   | 2.00   | 272K  |
+| Standard chat / multimodal (alt)                 | Gemini 2.5 Flash       | Google    | 0.30   | 2.50   | 1M    |
+| Structured extraction, strong instruction follow | Claude Haiku 4.5       | Anthropic | 1.00   | 5.00   | 200K  |
+| Long-document analysis (contracts, PDFs, code)   | GPT-4.1                | OpenAI    | 2.00   | 8.00   | 1M    |
+| Long-context multimodal analysis                 | Gemini 2.5 Pro (≤200K) | Google    | 1.25   | 10.00  | 1M    |
+| Long-context multimodal (>200K input)            | Gemini 2.5 Pro (>200K) | Google    | 2.50   | 15.00  | 1M    |
+| Complex reasoning, multi-step orchestration      | GPT-5                  | OpenAI    | 1.25   | 10.00  | 272K  |
+| Math / logic / scientific reasoning              | o3                     | OpenAI    | 2.00   | 8.00   | 200K  |
+| Budget reasoning (alt to o3)                     | o4-mini                | OpenAI    | 1.10   | 4.40   | 200K  |
+| Production coding / high-quality RAG             | Claude Sonnet 4.6      | Anthropic | 3.00   | 15.00  | 1M    |
+| Frontier autonomous coding / agentic loops       | Claude Opus 4.7        | Anthropic | 5.00   | 25.00  | 1M    |
+
+--- STEP C: MIX models in multi-agent architectures ---
+
+Don't use one model everywhere. A typical multi-agent system looks like:
+  • Triage / router agent  → GPT-4.1 Nano or Gemini 2.5 Flash-Lite (cheap)
+  • Extraction / worker agents → GPT-5 Mini or Claude Haiku 4.5 (mid-tier)
+  • RAG / Q&A agent → GPT-5 Mini or Gemini 2.5 Flash
+  • Long-doc analyzer → GPT-4.1 (1M context, cheap input)
+  • Orchestrator / planner → GPT-5 or Claude Sonnet 4.6
+  • Critic / reviewer → Claude Sonnet 4.6 (best instruction following)
+  • ONLY use Opus 4.7 / o3 when frontier reasoning truly needed (high stakes, autonomous)
+
+--- STEP D: Estimate tokens per run by task type ---
+
+| Task type                              | Avg input tokens | Avg output tokens |
+|----------------------------------------|------------------|-------------------|
+| Routing / classification               | 600              | 150               |
+| Standard chat / RAG (with KB snippet)  | 2,000            | 500               |
+| Multi-step orchestration / planning    | 4,500            | 1,200             |
+| Long-doc analysis (legal/research)     | 10,000           | 1,500             |
+| Very long context (full case/codebase) | 50,000           | 2,000             |
+
+Adjust based on actual KB context size and conversational vs transactional nature.
+
+Each model used in the architecture MUST appear as a separate row in llm_breakdown with its share of runs (runs_using_model). The sum of runs_using_model across rows should equal total_annual_runs.
 
 === VOLUME RULES ===
 
@@ -245,7 +280,7 @@ If user has both backlog and ongoing volume, populate "rows" array:
           items: {
             type: "object",
             properties: {
-              model_name: { type: "string", description: "e.g., 'GPT-4o', 'Claude Sonnet 4.5'" },
+              model_name: { type: "string", description: "Latest model name, e.g., 'GPT-5 Mini', 'GPT-4.1', 'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Gemini 2.5 Flash'" },
               provider: { type: "string", description: "OpenAI | Anthropic | Google" },
               runs_using_model: { type: "number", description: "Annual runs that use this model" },
               avg_input_tokens: { type: "number" },
@@ -585,24 +620,36 @@ total_annual_cost = lyzr_annual_cost + llm_annual_cost
 - ONGOING (monthly): unit_volume = monthly_volume × 12.
 - COMBINED: use "rows" array with both workloads.
 
-## LLM MODEL SELECTION (PROVIDER RATES, NO MARKUP)
+## LLM MODEL SELECTION FRAMEWORK (LATEST 2026 RATES, PASS-THROUGH, NO MARKUP)
 
-| Model              | Provider  | Input ($/1M) | Output ($/1M) | Use For                       |
-|--------------------|-----------|--------------|---------------|-------------------------------|
-| GPT-4o-mini        | OpenAI    | 0.15         | 0.60          | Simple/routing (LOW)          |
-| GPT-4o             | OpenAI    | 2.50         | 10.00         | Standard agents (MEDIUM)      |
-| Claude Haiku 4.5   | Anthropic | 1.00         | 5.00          | Fast structured tasks         |
-| Claude Sonnet 4.5  | Anthropic | 3.00         | 15.00         | Standard reasoning (MEDIUM)   |
-| Claude Opus 4.5    | Anthropic | 15.00        | 75.00         | Complex orchestrators (HIGH)  |
-| Gemini 2.0 Flash   | Google    | 0.10         | 0.40          | High-volume simple (LOW)      |
+Pick the cheapest model that clears each agent's quality bar. Mix models across agents — never use one model for everything.
 
-Token estimates by complexity:
-- LOW: 800 in / 200 out per run
-- MEDIUM: 2,000 in / 500 out per run
-- HIGH: 4,000 in / 1,000 out per run
-- Document-heavy (legal/long PDFs): 8,000-15,000 in / 1,500 out per run
+| Agent Role                                       | Recommended Model      | Provider  | Input  | Output | Ctx   |
+|--------------------------------------------------|------------------------|-----------|--------|--------|-------|
+| Routing, classification, simple extraction       | GPT-4.1 Nano           | OpenAI    | 0.10   | 0.40   | 1M    |
+| High-volume cheap workers (alt)                  | Gemini 2.5 Flash-Lite  | Google    | 0.10   | 0.40   | 1M    |
+| Standard chat, RAG, customer support             | GPT-5 Mini             | OpenAI    | 0.25   | 2.00   | 272K  |
+| Standard chat / multimodal (alt)                 | Gemini 2.5 Flash       | Google    | 0.30   | 2.50   | 1M    |
+| Structured extraction, strong instruction follow | Claude Haiku 4.5       | Anthropic | 1.00   | 5.00   | 200K  |
+| Long-document analysis (contracts, PDFs, code)   | GPT-4.1                | OpenAI    | 2.00   | 8.00   | 1M    |
+| Long-context multimodal (≤200K input)            | Gemini 2.5 Pro         | Google    | 1.25   | 10.00  | 1M    |
+| Long-context multimodal (>200K input)            | Gemini 2.5 Pro         | Google    | 2.50   | 15.00  | 1M    |
+| Complex reasoning, multi-step orchestration      | GPT-5                  | OpenAI    | 1.25   | 10.00  | 272K  |
+| Math / logic / scientific reasoning              | o3                     | OpenAI    | 2.00   | 8.00   | 200K  |
+| Budget reasoning (alt to o3)                     | o4-mini                | OpenAI    | 1.10   | 4.40   | 200K  |
+| Production coding / high-quality RAG             | Claude Sonnet 4.6      | Anthropic | 3.00   | 15.00  | 1M    |
+| Frontier autonomous coding / agentic loops       | Claude Opus 4.7        | Anthropic | 5.00   | 25.00  | 1M    |
 
-If different agents use different models, list each model in llm_breakdown.
+Typical multi-agent mix: triage → Nano/Flash-Lite • workers → GPT-5 Mini/Haiku 4.5 • orchestrator → GPT-5/Sonnet 4.6 • long-doc → GPT-4.1 • only use Opus 4.7 / o3 when frontier reasoning is truly needed.
+
+Token estimates per run:
+- Routing / classification:                 600 in /   150 out
+- Standard chat / RAG with KB snippet:    2,000 in /   500 out
+- Multi-step orchestration / planning:    4,500 in / 1,200 out
+- Long-doc analysis (legal / research):  10,000 in / 1,500 out
+- Very long context (full case/codebase):50,000 in / 2,000 out
+
+Each model used MUST appear as a separate row in llm_breakdown. Sum of runs_using_model across rows should equal total_annual_runs.
 
 ## OUTPUT GUIDELINES
 
