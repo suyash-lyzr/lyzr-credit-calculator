@@ -1,0 +1,59 @@
+Lyzr pricing & agent run model — summary
+The pricing model
+Lyzr charges only for agent runs. Nothing else gets billed — no platform fee, no LLM markup, no service fee, no infrastructure fee. One unit, one rate.
+Two deployment options, both priced per agent run:
+DeploymentRateWhat it includesLyzr Cloud$0.08 per agent runFully managed cloud, no compute overhead, scale on demandLyzr VPC / On-Prem$0.03 per agent runCustomer's own VPC or on-prem, full data sovereignty
+LLM costs are passed through separately at provider rates — you pay your own OpenAI / Anthropic / Google bills directly.
+What "an agent run" actually means
+An agent run is one invocation of an agent that performs a discrete reasoning task. Inside one run, the agent can:
+
+Make Knowledge Base calls
+Make Tool calls
+Make sub-Agent calls
+Make Memory calls
+Pass through Responsible AI Guardrails
+Pass through Agent Security Policy
+
+All of that — knowledge lookup, tool use, governance, memory write — happens inside a single agent run. You're not charged separately for those internal calls. One agent run = one billable unit, regardless of how much work happens inside it.
+This is fundamentally different from "per LLM API call" pricing. An agent run is closer to "one completed unit of agent reasoning."
+How to convert a use case to agent runs
+The mental model is: count the discrete reasoning steps, not the outputs they produce.
+A single agent run can produce many outputs in one call (e.g. "generate 11 variants" is 1 run with structured output, not 11 runs). But two genuinely different reasoning tasks — even if they're related — are 2 runs.
+Step-by-step framework
+1. Map the use case as a workflow. Break it into the discrete decision points and reasoning steps. Each step where an agent has to "think" about something different is a candidate agent run.
+2. For each step, ask:
+
+Is this one reasoning task, or many? "Score this brief" = 1 run. "Score this brief across 4 independent quality dimensions" = 4 runs (each dimension is a separate reasoning task with its own rubric).
+Does it batch through structured output? "Generate variants for 11 segments" = 1 run if you can prompt for all 11 in one structured response. But "reason independently about each segment's psychology, then generate" = 11 runs.
+Is iteration involved? If a brief gets revised after quality scoring, the revision is another run. If review surfaces concerns and the agent has to detect, fix, and re-check — that's 3 runs per concern.
+
+3. Apply the funnel. Most enterprise use cases have a funnel between "things explored" and "things produced." For a marketing campaign workflow: hypotheses simulated → briefs developed → reviews → creative → live. Volume widens upstream — count what flows through each stage, not just the final output.
+4. Add iteration overhead. Real workflows include:
+
+Re-runs when output isn't right first time
+Multiple revision rounds with stakeholders
+Copilot conversations (each turn = 1 run)
+Edge case handling
+
+A 30-50% buffer over baseline is reasonable for most enterprise workflows.
+Quick conversion examples
+Use case actionAgent runsGenerate a single document from a prompt1Generate 50 variants of copy in structured output1Score one document against 5 independent rubric dimensions54 reviewers each evaluating 8 dimensions32100 synthetic agents reacting to a campaign across 4 channels400One conversational turn with the copilot1Tool call to a database (no reasoning)0 (free, inside an agent run)
+Common mistakes to avoid
+1. Counting outputs instead of reasoning calls. "We generated 88 pieces of copy" doesn't mean 88 runs — it might be 1 run with structured output, or 11 runs (one per segment) depending on architecture.
+2. Counting tool calls as runs. Tool calls inside an agent run are free. Only count the reasoning that drives them.
+3. Forgetting the funnel. If a use case ships 600 of something, but the system processes 5,000 attempts to get there, you're undercounting by 8×.
+4. Counting GitAgent vs Lyzr Agent at the same rate. A GitAgent does the work of multiple traditional agents in one run — same $0.03/$0.08 rate per run, but each run does more work. So GitAgent architectures look cheaper per outcome than naive multi-agent pipelines.
+5. Ignoring iteration. Real workflows rarely complete first-try. Always model the revision loops.
+The conversion shortcut
+For most enterprise workflows, the formula is:
+
+Annual agent runs = (volume per stage × runs per unit) summed across all funnel stages × (1 + iteration buffer)
+
+Where:
+
+Volume per stage = how many things flow through that stage in a year (with the funnel multiplier from upstream)
+Runs per unit = the discrete reasoning steps inside one stage (count carefully — what's a single structured-output call vs what's genuinely independent reasoning)
+Iteration buffer = 30-50% for re-runs, copilot, edge cases
+
+Then multiply by $0.03 (VPC) or $0.08 (Cloud) for consumption cost.
+That's the whole model.

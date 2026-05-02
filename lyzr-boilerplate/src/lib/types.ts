@@ -37,35 +37,57 @@ export interface ArchitectureData {
   mermaidCode: string;
 }
 
-export interface CalculationDetails {
-  vol_user_monthly: number;
-  n_sessions_annual: number;
-  n_runs_annual: number;
-  cost_fixed: number;
-  cost_model: number;
-  cost_inference: number;
-  session_cost_total: number;
-  inference_cost_total: number;
-  model_used: string;
+export interface AgentRunStep {
+  step_name: string;
+  runs: number;
+  reasoning: string;
 }
 
-export interface CreditRow {
-  action_profile: string;
-  complexity: string;
-  unit_price: number;
-  total_volume: number;
+export interface LLMModelBreakdown {
+  model_name: string;
+  provider: string;
+  runs_using_model: number;
+  avg_input_tokens: number;
+  avg_output_tokens: number;
+  input_rate_per_1m: number;
+  output_rate_per_1m: number;
+  annual_cost: number;
+}
+
+export interface WorkloadRow {
+  workload_name: string;
+  runs_per_unit: number;
+  volume: number;
+  annual_runs: number;
+  lyzr_cost: number;
+  llm_cost: number;
   total_cost: number;
 }
 
 export interface CreditCalculation {
   agent_architecture_summary: string;
-  action_profile: string;
-  complexity: string;
-  unit_price: number;
-  total_volume: number;
+
+  deployment: "cloud" | "vpc";
+  rate_per_run: number;
+
+  workload_name: string;
+  unit_volume: number;
+  runs_per_unit: number;
+  runs_breakdown: AgentRunStep[];
+  iteration_buffer_pct: number;
+  total_annual_runs: number;
+
+  lyzr_annual_cost: number;
+
+  llm_breakdown: LLMModelBreakdown[];
+  llm_annual_cost: number;
+  llm_note?: string;
+
   total_annual_cost: number;
-  calculation_details: CalculationDetails;
-  rows?: CreditRow[];
+
+  rows?: WorkloadRow[];
+  combined_lyzr_total?: number;
+  combined_llm_total?: number;
   combined_total?: number;
   combined_note?: string;
 }

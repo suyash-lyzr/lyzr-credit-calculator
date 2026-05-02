@@ -110,7 +110,8 @@ export function LandingPage({
           </div>
 
           <p className="mt-12 text-center text-[18px] text-muted-foreground italic max-w-2xl mx-auto">
-            Lyzr follows a transparent pricing model where customers pay only for Agent Actions, not the underlying LLM or compute cost.
+            Transparent pricing: $0.08 per agent run on Lyzr Cloud (or $0.03 on VPC).
+            LLM costs are passed through at provider rates — no markup, no platform fee.
           </p>
         </div>
       </div>

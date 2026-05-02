@@ -85,7 +85,7 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
               <td className="py-2.5 px-4">${data.human_analysis.cost_per_unit.toFixed(2)} / {data.unit_name}</td>
               <td className="py-2.5 px-4">
                 <span className="font-medium">${data.ai_analysis.cost_per_unit.toFixed(2)} / {data.unit_name}</span>{" "}
-                <span className="text-muted-foreground">(Lyzr + Infra)</span>
+                <span className="text-muted-foreground">(Lyzr runs + LLM)</span>
               </td>
             </tr>
             <tr>
@@ -105,9 +105,9 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
       </div>
 
       <p className="text-sm">
-        <span className="font-semibold">The Bottom Line:</span> For a total investment of ~{formatCurrency(aiYearlyCost)} (Software + Compute), 
-        you replace {formatCurrency(humanYearlyCost)} in manual labor, ensuring instant scalability and a persistent 
-        Knowledge Graph of your {data.use_case.toLowerCase()} data.
+        <span className="font-semibold">The Bottom Line:</span> For a total investment of ~{formatCurrency(aiYearlyCost)} (Lyzr agent runs + LLM pass-through),
+        you replace {formatCurrency(humanYearlyCost)} in manual labor, ensuring instant scalability and 24/7 execution
+        across your {data.use_case.toLowerCase()} workflow.
       </p>
     </div>
   );

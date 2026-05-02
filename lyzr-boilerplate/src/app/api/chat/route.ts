@@ -11,37 +11,39 @@ const anthropic = new Anthropic({
 const tools: Anthropic.Tool[] = [
   {
     name: "generate_architecture",
-    description: `Analyze the user's use case and generate an agent architecture. You MUST derive these architecture counts:
+    description: `Analyze the user's use case and design a multi-agent architecture.
 
-N_Agents: How many agents needed?
+Determine these architecture properties:
+
+N_Agents: How many agents are needed?
 - Single Agent = 1
 - Orchestrator Pattern = 1 Manager + X Sub-agents
-- Multi-Agent Chain = Total number of agents in workflow
+- Multi-Agent Chain = Total agents in workflow
 
-N_KB: Does use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No)
-N_RAI: Is domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No)
-N_Tools: Count of tool integrations
+N_KB: Does the use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No)
+N_RAI: Is the domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No)
+N_Tools: Count of distinct external tool integrations
 
-Also determine scenario variables per inference:
-B_Mem: IF Conversational = 1, IF Transactional/Process = 0
-B_KB: IF Search/Analysis = 1, ELSE = 0
-B_RAI: IF High Complexity/External Output = 1, ELSE = 0
-B_API: = N_Tools_Called_Per_Run (ONLY external tool/API calls, NOT agent executions - LLM cost is separate)`,
+Determine scenario flags (these still inform LLM model selection):
+B_Mem: 1 if Conversational, 0 if Transactional
+B_KB: 1 if Search/Analysis is needed, 0 otherwise
+B_RAI: 1 if High Complexity / External Output, 0 otherwise
+B_API: Number of external tool calls per run
+
+Choose complexity:
+- LOW: 1 agent, 0-1 connections, simple Q&A
+- MEDIUM: 2-3 agents OR orchestrator pattern, 2+ connections
+- HIGH: 3+ agents in chain, mission-critical, 3+ connections
+
+Mermaid diagram MUST use clean professional text. NEVER include emojis anywhere.`,
     input_schema: {
       type: "object" as const,
       properties: {
-        title: {
-          type: "string",
-          description: "Agent Workflow title",
-        },
-        summary: {
-          type: "string",
-          description: "High-level summary of what the agent does",
-        },
+        title: { type: "string", description: "Agent Workflow title" },
+        summary: { type: "string", description: "High-level summary of what the workflow does" },
         complexity_profile: {
           type: "string",
           enum: ["LOW", "MEDIUM", "HIGH"],
-          description: "LOW: 1-2 connections, single agent. MEDIUM: 2+ connections, orchestrator. HIGH: 3+ connections, multi-agent chain",
         },
         architecture_pattern: {
           type: "string",
@@ -50,193 +52,275 @@ B_API: = N_Tools_Called_Per_Run (ONLY external tool/API calls, NOT agent executi
         architecture_counts: {
           type: "object",
           properties: {
-            n_agents: { type: "number", description: "Total number of agents" },
-            n_kb: { type: "number", description: "Number of knowledge bases (0 or 1)" },
-            n_rai: { type: "number", description: "Number of safety policies (0 or 1)" },
-            n_tools: { type: "number", description: "Number of tools" },
+            n_agents: { type: "number" },
+            n_kb: { type: "number" },
+            n_rai: { type: "number" },
+            n_tools: { type: "number" },
           },
           required: ["n_agents", "n_kb", "n_rai", "n_tools"],
         },
         scenario_variables: {
           type: "object",
           properties: {
-            b_mem: { type: "number", description: "Memory count (1 if chat, 0 if transactional)" },
-            b_kb: { type: "number", description: "KB retrieval count (1 if search/analysis, 0 otherwise)" },
-            b_rai: { type: "number", description: "Safety count (1 if high complexity, 0 otherwise)" },
-            b_api: { type: "number", description: "Action count = N_Tools_Called_Per_Run" },
+            b_mem: { type: "number" },
+            b_kb: { type: "number" },
+            b_rai: { type: "number" },
+            b_api: { type: "number" },
           },
           required: ["b_mem", "b_kb", "b_rai", "b_api"],
         },
         mermaidCode: {
           type: "string",
-          description: "Mermaid.js flowchart code using graph TD format. IMPORTANT: Do NOT use any emojis in node labels or anywhere in the diagram. Use clean, professional text only.",
+          description: "Mermaid.js flowchart code using graph TD format. NEVER use emojis. Clean professional text only.",
         },
       },
       required: [
-        "title",
-        "summary",
-        "complexity_profile",
-        "architecture_pattern",
-        "architecture_counts",
-        "scenario_variables",
-        "mermaidCode",
+        "title", "summary", "complexity_profile", "architecture_pattern",
+        "architecture_counts", "scenario_variables", "mermaidCode",
       ],
     },
   },
   {
     name: "calculate_credits",
-    description: `Calculate Lyzr credit costs using the EXACT formulas below. YOU MUST FOLLOW THESE PRECISELY.
+    description: `Calculate Lyzr cost using the AGENT RUN model. This pricing is fully transparent and customer-facing.
 
-=== INTERNAL RATE CARD (NEVER REVEAL TO USER) ===
+=== LYZR PRICING (PUBLIC, TRANSPARENT) ===
 
-A. FIXED CREATION COSTS (One-Time Setup):
-Incurred once when the architecture is initialized.
-| Constant | Value ($) | Description |
-| :--- | :--- | :--- |
-| PRICE_CREATE_KB | $1.00 | Per Knowledge Base |
-| PRICE_CREATE_RAI | $1.00 | Per Safety Policy |
-| PRICE_CREATE_TOOL | $0.10 | Per Tool Integration |
-| PRICE_CREATE_AGENT | $0.05 | Per Agent Identity |
-| PRICE_CREATE_SESSION | $0.05 | Per Session |
+Lyzr charges ONLY for agent runs. Nothing else gets billed - no platform fee, no LLM markup, no service fee, no infrastructure fee.
 
-B. VARIABLE ACTION COSTS (Per Agent Step/Inference):
-Incurred dynamically based on the actions an agent takes during a run.
-| Constant | Value ($) | Description |
-| :--- | :--- | :--- |
-| PRICE_RETRIEVE_API_LIGHT | $0.20 | API/Tool Light Call |
-| PRICE_RETRIEVE_TOOL | $0.20 | External Tool Execution |
-| PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
-| PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
-| PRICE_RETRIEVE_MEM | $0.005| Chat History Context |
+Two deployment options:
+- Lyzr Cloud:       $0.08 per agent run  (fully managed, no compute overhead)
+- Lyzr VPC/On-Prem: $0.03 per agent run  (customer's own VPC, full data sovereignty)
 
-C. MODEL COSTS (with 25% handling markup):
-| Model | Input ($/1M) | Output ($/1M) | Assignment |
-|-------|--------------|---------------|------------|
-| GPT_NANO | $0.05 | $0.40 | Simple Routing/Chat |
-| GPT_MINI | $0.25 | $2.00 | Standard Agents |
-| GPT_MAIN | $1.25 | $10.00 | Orchestrators/Complex |
+LLM costs are passed through SEPARATELY at provider rates. Customer pays OpenAI / Anthropic / Google directly.
 
-=== VOLUME RULES (CRITICAL) ===
-BACKLOG (one-time): N_Runs_Backlog = backlog_volume (NO buffer, NO annualization)
-ONGOING (monthly): N_Runs_Ongoing = monthly_volume × 12 × 1.20 (with 20% buffer)
-COMBINED: Total = N_Runs_Backlog + N_Runs_Ongoing
+=== WHAT IS AN AGENT RUN ===
 
-=== CALCULATION FORMULAS ===
-STEP 1: Fixed Setup Cost (one-time)
-Cost_Fixed = (N_Agents × 0.05) + (N_KB × 1.00) + (N_RAI × 1.00) + (N_Tools × 0.10)
+An agent run = one invocation of an agent that performs a discrete reasoning task.
 
-STEP 2: Model Cost Per Inference
-Cost_Model = [(Tokens_In/1M × Price_In) + (Tokens_Out/1M × Price_Out)] × 1.25
-- LOW → GPT_NANO: ~$0.000375
-- MEDIUM → GPT_MINI: ~$0.001875
-- HIGH → GPT_MAIN: ~$0.009375
+INSIDE one agent run, the following are FREE (not separately billed):
+- Knowledge Base lookups
+- Tool / API calls
+- Sub-agent calls
+- Memory reads/writes
+- Responsible AI Guardrails
+- Agent Security Policy checks
 
-STEP 3: Variable Cost Per Inference
-Cost_Inference = Cost_Model + 0.05 + (B_Mem × 0.005) + (B_KB × 0.05) + (B_RAI × 0.15) + (B_API × 0.05)
+One agent run = one billable unit, regardless of how much work happens inside it.
+
+=== HOW TO COUNT AGENT RUNS PER USE CASE ===
+
+Step 1: Map the use case as a workflow. Break it into discrete reasoning steps.
+Step 2: For each step ask:
+  - Is this ONE reasoning task or many?
+    "Score this brief" = 1 run
+    "Score this brief across 4 independent quality dimensions" = 4 runs
+  - Does it batch via structured output?
+    "Generate 11 segment variants in one structured output" = 1 run
+    "Reason independently about each segment, then generate" = 11 runs
+  - Is iteration involved?
+    Re-runs after revision = additional runs
+    Each copilot conversation turn = 1 run
+
+Step 3: Apply the FUNNEL. Volume widens upstream.
+  Example: ship 600 final outputs but system explored 5,000 candidates upstream → count 5,000.
+
+Step 4: Add ITERATION BUFFER (30-50% over baseline).
+  Real workflows include re-runs, revision rounds, copilot turns, edge case handling.
+
+=== QUICK CONVERSION EXAMPLES ===
+  Generate one document from a prompt = 1 run
+  Generate 50 variants in one structured-output call = 1 run
+  Score one document across 5 independent rubric dimensions = 5 runs
+  4 reviewers × 8 dimensions = 32 runs
+  100 synthetic agents reacting across 4 channels = 400 runs
+  One copilot turn = 1 run
+  Tool / DB call inside an agent run = 0 (free)
+
+=== COMMON MISTAKES TO AVOID ===
+1. Counting outputs instead of reasoning steps
+2. Counting tool calls as runs (they're free inside a run)
+3. Forgetting the funnel (upstream volume widens)
+4. Ignoring iteration buffer
+
+=== LLM COST ESTIMATION (PASS-THROUGH, SHOWN SEPARATELY) ===
+
+Estimate average tokens per run based on architecture and use case. Use these provider rates (NO markup, these are real public rates):
+
+| Model              | Provider  | Input ($/1M) | Output ($/1M) | Use For                       |
+|--------------------|-----------|--------------|---------------|-------------------------------|
+| GPT-4o-mini        | OpenAI    | 0.15         | 0.60          | Simple/routing tasks (LOW)    |
+| GPT-4o             | OpenAI    | 2.50         | 10.00         | Standard agents (MEDIUM)      |
+| Claude Haiku 4.5   | Anthropic | 1.00         | 5.00          | Fast structured tasks         |
+| Claude Sonnet 4.5  | Anthropic | 3.00         | 15.00         | Standard reasoning (MEDIUM)   |
+| Claude Opus 4.5    | Anthropic | 15.00        | 75.00         | Complex orchestrators (HIGH)  |
+| Gemini 2.0 Flash   | Google    | 0.10         | 0.40          | High-volume simple (LOW)      |
+
+Token estimation guidance:
+- LOW complexity / simple chat: 800 in / 200 out per run
+- MEDIUM / standard agents: 2,000 in / 500 out per run
+- HIGH / orchestrators with KB context: 4,000 in / 1,000 out per run
+- Document-heavy (legal contracts, long PDFs): 8,000-15,000 in / 1,500 out per run
+- Adjust based on use case domain, KB usage, and conversational vs transactional nature.
+
+If different agents in the architecture use different models, list each model in llm_breakdown with its share of runs.
+
+=== VOLUME RULES ===
+
+unit_volume = annual volume of business units the user processes (NOT runs).
+
+For BACKLOG (one-time): use the exact backlog count as unit_volume. No buffer needed beyond iteration_buffer_pct.
+For ONGOING (monthly): unit_volume = monthly_volume × 12.
+For COMBINED: use the "rows" array to show BOTH workloads as separate rows.
+
+total_annual_runs = unit_volume × runs_per_unit × (1 + iteration_buffer_pct/100)
+
+=== CALCULATION ===
+
+rate_per_run = 0.08 (cloud) OR 0.03 (vpc) - default to cloud unless user says otherwise.
+
+lyzr_annual_cost = total_annual_runs × rate_per_run
+llm_annual_cost  = sum of (runs_using_model × ((avg_input_tokens × input_rate / 1M) + (avg_output_tokens × output_rate / 1M)))
+total_annual_cost = lyzr_annual_cost + llm_annual_cost
 
 === MULTIPLE WORKLOADS ===
-When user has BOTH backlog AND ongoing volume, use the "rows" array to show BOTH in a single table.
-Example: 200k backlog + 2k/month ongoing = rows: [{Backlog, 200000, cost1}, {Ongoing, 28800, cost2}]
-Set combined_total = sum of all row costs, combined_note = explanation`,
+
+If user has both backlog and ongoing volume, populate "rows" array:
+  rows: [
+    { workload_name: "Backlog Migration", runs_per_unit, volume, annual_runs, lyzr_cost, llm_cost, total_cost },
+    { workload_name: "Ongoing Processing", ... }
+  ]
+  combined_lyzr_total = sum of row lyzr_cost
+  combined_llm_total = sum of row llm_cost
+  combined_total = combined_lyzr_total + combined_llm_total
+  combined_note = brief explanation`,
     input_schema: {
       type: "object" as const,
       properties: {
-        agent_architecture_summary: {
+        agent_architecture_summary: { type: "string", description: "1-2 sentence summary of the agent architecture" },
+
+        deployment: {
           type: "string",
-          description: "Summary of the agent architecture",
+          enum: ["cloud", "vpc"],
+          description: "Deployment option. Default to 'cloud' unless user specifies VPC/on-prem.",
         },
-        action_profile: {
-          type: "string",
-          description: "Name of the workflow (used when single workload)",
-        },
-        complexity: {
-          type: "string",
-          description: "Complexity (e.g., 'High (4-Agent Chain)')",
-        },
-        unit_price: {
+        rate_per_run: {
           type: "number",
-          description: "Cost per action/inference in USD",
+          description: "0.08 for cloud, 0.03 for vpc",
         },
-        total_volume: {
-          type: "number",
-          description: "Total volume (used when single workload)",
-        },
-        total_annual_cost: {
-          type: "number",
-          description: "Total cost (used when single workload)",
-        },
-        rows: {
+
+        workload_name: { type: "string", description: "Name of the workload (e.g., 'Invoice Processing')" },
+        unit_volume: { type: "number", description: "Annual volume of business units (NOT agent runs)" },
+        runs_per_unit: { type: "number", description: "Discrete agent reasoning runs per single unit" },
+        runs_breakdown: {
           type: "array",
-          description: "REQUIRED when user has multiple workloads (e.g., backlog + ongoing). Each row represents a distinct workload.",
+          description: "List the discrete reasoning steps that make up runs_per_unit",
           items: {
             type: "object",
             properties: {
-              action_profile: { type: "string", description: "Workload name (e.g., 'Backlog Migration', 'Ongoing Processing')" },
-              complexity: { type: "string" },
-              unit_price: { type: "number" },
-              total_volume: { type: "number" },
+              step_name: { type: "string", description: "Name of the reasoning step (e.g., 'Triage', 'KB Lookup', 'Routing')" },
+              runs: { type: "number", description: "Agent runs for this step per unit" },
+              reasoning: { type: "string", description: "1 sentence explaining why this is N runs" },
+            },
+            required: ["step_name", "runs", "reasoning"],
+          },
+        },
+        iteration_buffer_pct: {
+          type: "number",
+          description: "Iteration buffer percent (30-50 typical) for re-runs, revisions, copilot, edge cases",
+        },
+        total_annual_runs: {
+          type: "number",
+          description: "= unit_volume × runs_per_unit × (1 + iteration_buffer_pct/100)",
+        },
+
+        lyzr_annual_cost: {
+          type: "number",
+          description: "= total_annual_runs × rate_per_run",
+        },
+
+        llm_breakdown: {
+          type: "array",
+          description: "Break down LLM cost per model used in the architecture",
+          items: {
+            type: "object",
+            properties: {
+              model_name: { type: "string", description: "e.g., 'GPT-4o', 'Claude Sonnet 4.5'" },
+              provider: { type: "string", description: "OpenAI | Anthropic | Google" },
+              runs_using_model: { type: "number", description: "Annual runs that use this model" },
+              avg_input_tokens: { type: "number" },
+              avg_output_tokens: { type: "number" },
+              input_rate_per_1m: { type: "number", description: "USD per 1M input tokens (provider rate, no markup)" },
+              output_rate_per_1m: { type: "number", description: "USD per 1M output tokens (provider rate, no markup)" },
+              annual_cost: { type: "number" },
+            },
+            required: [
+              "model_name", "provider", "runs_using_model", "avg_input_tokens",
+              "avg_output_tokens", "input_rate_per_1m", "output_rate_per_1m", "annual_cost",
+            ],
+          },
+        },
+        llm_annual_cost: { type: "number", description: "Sum of all llm_breakdown annual_cost values" },
+        llm_note: {
+          type: "string",
+          description: "e.g., 'Pass-through to providers at public rates. Customer billed directly.'",
+        },
+
+        total_annual_cost: {
+          type: "number",
+          description: "= lyzr_annual_cost + llm_annual_cost",
+        },
+
+        rows: {
+          type: "array",
+          description: "Use ONLY when there are multiple workloads (e.g., backlog + ongoing)",
+          items: {
+            type: "object",
+            properties: {
+              workload_name: { type: "string" },
+              runs_per_unit: { type: "number" },
+              volume: { type: "number" },
+              annual_runs: { type: "number" },
+              lyzr_cost: { type: "number" },
+              llm_cost: { type: "number" },
               total_cost: { type: "number" },
             },
-            required: ["action_profile", "complexity", "unit_price", "total_volume", "total_cost"],
+            required: ["workload_name", "runs_per_unit", "volume", "annual_runs", "lyzr_cost", "llm_cost", "total_cost"],
           },
         },
-        combined_total: {
-          type: "number",
-          description: "Sum of all row costs when multiple workloads exist",
-        },
-        combined_note: {
-          type: "string",
-          description: "Explanation of combined total (e.g., 'includes full backlog + first year ongoing')",
-        },
-        calculation_details: {
-          type: "object",
-          description: "Calculation breakdown for verification",
-          properties: {
-            vol_user_monthly: { type: "number" },
-            n_sessions_annual: { type: "number" },
-            n_runs_annual: { type: "number" },
-            cost_fixed: { type: "number" },
-            cost_model: { type: "number" },
-            cost_inference: { type: "number" },
-            session_cost_total: { type: "number" },
-            inference_cost_total: { type: "number" },
-            model_used: { type: "string" },
-          },
-          required: ["cost_fixed", "cost_model", "cost_inference", "model_used"],
-        },
+        combined_lyzr_total: { type: "number" },
+        combined_llm_total: { type: "number" },
+        combined_total: { type: "number" },
+        combined_note: { type: "string" },
       },
       required: [
-        "agent_architecture_summary",
-        "action_profile",
-        "complexity",
-        "unit_price",
-        "total_volume",
+        "agent_architecture_summary", "deployment", "rate_per_run",
+        "workload_name", "unit_volume", "runs_per_unit", "runs_breakdown",
+        "iteration_buffer_pct", "total_annual_runs",
+        "lyzr_annual_cost", "llm_breakdown", "llm_annual_cost",
         "total_annual_cost",
-        "calculation_details",
       ],
     },
   },
   {
     name: "web_search",
-    description: `Search the web for real-time US labor rates for specific job roles.
-Query format: "[Job Title] median hourly wage US 2024 2025"
-Source Priority: Bureau of Labor Statistics (BLS), Salary.com, Glassdoor`,
+    description: `Search the web for real-time US labor rates. Source priority: Bureau of Labor Statistics (BLS), Salary.com, Glassdoor.`,
     input_schema: {
       type: "object" as const,
       properties: {
-        query: {
-          type: "string",
-          description: "The search query to find labor rate information",
-        },
+        query: { type: "string", description: "The search query" },
       },
       required: ["query"],
     },
   },
   {
     name: "calculate_roi",
-    description: `Calculate ROI comparing AI automation vs human labor. Base country: USA.
+    description: `Calculate ROI comparing total AI cost (Lyzr agent runs + LLM pass-through) vs human labor.
 
-CRITICAL: Use realistic US labor rates. Savings should typically be 80-95%.
+CRITICAL: Use ai_analysis.cost_per_unit = total_annual_cost / unit_volume from the credit calculation.
+This means cost_per_unit INCLUDES both the Lyzr agent run cost AND the LLM pass-through cost.
+
+Base country: USA. Savings should typically be 80-95%.
 
 Role Mapping (US Median 2024 + 1.3x Loaded):
 - Contract Analysis → Paralegal: $32/hr base → $41.60/hr loaded
@@ -247,24 +331,18 @@ Role Mapping (US Median 2024 + 1.3x Loaded):
 - Data Entry → Specialist: $20/hr base → $26/hr loaded
 - HR Queries → HR Coordinator: $27/hr base → $35.10/hr loaded
 
-Human Time Per Task (be realistic):
+Human time per task (be realistic):
 - Ticket triage: 8-12 minutes
 - Invoice processing: 15-25 minutes
 - Document review: 20-40 minutes
 - Contract analysis: 45-90 minutes
 
-Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
+Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
     input_schema: {
       type: "object" as const,
       properties: {
-        use_case: {
-          type: "string",
-          description: "The automation use case",
-        },
-        unit_name: {
-          type: "string",
-          description: "What one unit of work is called",
-        },
+        use_case: { type: "string" },
+        unit_name: { type: "string" },
         human_analysis: {
           type: "object",
           properties: {
@@ -280,7 +358,7 @@ Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
         ai_analysis: {
           type: "object",
           properties: {
-            cost_per_unit: { type: "number" },
+            cost_per_unit: { type: "number", description: "Total cost per unit including Lyzr agent runs + LLM pass-through" },
             time_per_task_seconds: { type: "number" },
           },
           required: ["cost_per_unit", "time_per_task_seconds"],
@@ -308,150 +386,114 @@ Formula: Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
           },
           required: ["human_monthly_cost", "ai_monthly_cost", "monthly_savings", "human_yearly_cost", "ai_yearly_cost", "yearly_savings", "savings_percentage", "time_savings_percentage", "payback_period_days"],
         },
-        roi_percentage: {
-          type: "number",
-        },
+        roi_percentage: { type: "number" },
       },
       required: ["use_case", "unit_name", "human_analysis", "ai_analysis", "volume_estimates", "comparison", "roi_percentage"],
     },
   },
   {
     name: "review_and_validate",
-    description: `You are a Quality Assurance Analyst reviewing the full calculation output for accuracy and business logic consistency.
+    description: `Quality assurance review for the full estimate. Validate all artifacts against business logic and the agent run model.
 
-YOUR ROLE: Act as an independent reviewer who validates ALL THREE artifacts (Architecture, Credits, ROI) against real-world business rules and the specific use case context.
+Pricing is fully TRANSPARENT in this model - you can refer to agent runs, the $0.08/$0.03 rates, and LLM pass-through directly. No confidentiality required.
 
-=== ABSOLUTE CONFIDENTIALITY IN OUTPUT (CRITICAL) ===
-The "issue" and "expected" fields are shown directly to users. You MUST write them in plain business language WITHOUT revealing:
-- ANY formulas, multipliers, buffers (20%, 1.20, etc.)
-- ANY internal variable names (N_Runs, Cost_Fixed, Cost_Model, B_Mem, etc.)
-- ANY rate card prices or component costs
-- ANY calculation breakdowns or mathematical formulas
+Validation checks:
+1. Architecture: Agent count matches workflow, KB/RAI/Tool flags reasonable
+2. Agent Runs: runs_per_unit matches the discrete reasoning steps shown in runs_breakdown
+3. Iteration buffer: 30-50% is typical, more only if heavy revision workflow
+4. LLM model selection: matches complexity (simple → small models, complex → larger models)
+5. Token estimates: reasonable for the use case domain
+6. Volumes: total_annual_runs = unit_volume × runs_per_unit × (1 + buffer/100)
+7. Lyzr cost = total_annual_runs × rate_per_run
+8. ROI: ai_analysis.cost_per_unit equals total_annual_cost / unit_volume (Lyzr + LLM)
+9. Savings percentage realistic (80-95% typical)
 
-GOOD issue examples:
-- "The annual volume appears too high for the stated monthly input."
-- "The total cost seems inconsistent with the ROI comparison."
-- "The AI cost per unit doesn't match between the cost and ROI sections."
+Write issues in clear business language. Since pricing is transparent you may reference agent runs, rates, and LLM costs directly.
 
-BAD issue examples (NEVER DO THIS):
-- "N_Runs should be 180,000 x 1.20 = 216,000" ← REVEALS FORMULA
-- "Cost_Inference calculation is wrong" ← REVEALS INTERNAL TERMS
-- "The 20% buffer was not applied correctly" ← REVEALS BUFFER
-
-GOOD expected examples:
-- "Total should be approximately $45,000 based on the volume provided."
-- "The figures should align across all sections."
-- "The cost breakdown should reflect the stated complexity level."
-
-BAD expected examples (NEVER DO THIS):
-- "Expected: N_Runs = 180,000 x 1.20 = 216,000" ← REVEALS FORMULA
-- "Cost_Inference should be $0.21 per run" ← REVEALS MICRO-COST
-
-VALIDATION CHECKS (Internal - Use for your analysis, don't reveal in output):
-1. Architecture: Agent count matches workflow, KB/RAI flags correct, tool count accurate
-2. Credits: Unit price reasonable, volume calculations correct, complexity matches pattern
-3. ROI: Savings percentage realistic (80-95%), role mapping appropriate, time estimates reasonable
-4. Cross-check: AI cost matches between Credits and ROI, volumes consistent
-
-DECISION LOGIC:
-- If ALL checks pass → status: "approved", issues: []
-- If ANY check fails → status: "needs_revision", issues: [plain language descriptions only]
-
-Write ALL user-facing text as if explaining to a business executive who knows nothing about the internal calculation system.`,
+DECISION:
+- All checks pass → status: "approved", issues: []
+- Any failure → status: "needs_revision", issues: [...]`,
     input_schema: {
       type: "object" as const,
       properties: {
-        status: {
-          type: "string",
-          enum: ["approved", "needs_revision"],
-          description: "Verdict after review",
-        },
+        status: { type: "string", enum: ["approved", "needs_revision"] },
         issues: {
           type: "array",
-          description: "List of specific problems found (empty if approved). MUST be written in plain business language without formulas or internal terms.",
           items: {
             type: "object",
             properties: {
-              artifact: {
-                type: "string",
-                enum: ["architecture", "credits", "roi", "cross_check"],
-                description: "Which artifact has the issue",
-              },
-              severity: {
-                type: "string",
-                enum: ["critical", "warning"],
-                description: "Critical = must fix, Warning = recommend fix",
-              },
-              issue: {
-                type: "string",
-                description: "Plain language description of the problem. NO formulas, NO internal terms, NO calculation details.",
-              },
-              expected: {
-                type: "string",
-                description: "Plain language description of what should be correct. NO formulas, NO internal terms.",
-              },
+              artifact: { type: "string", enum: ["architecture", "credits", "roi", "cross_check"] },
+              severity: { type: "string", enum: ["critical", "warning"] },
+              issue: { type: "string" },
+              expected: { type: "string" },
             },
             required: ["artifact", "severity", "issue", "expected"],
           },
         },
-        summary: {
-          type: "string",
-          description: "1-2 sentence overall verdict in plain business language. NO formulas or internal terms.",
-        },
+        summary: { type: "string" },
       },
       required: ["status", "issues", "summary"],
     },
   },
 ];
 
-const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that helps users understand the cost of building AI agents on Lyzr.
+const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that helps users estimate the cost of running AI agents on Lyzr.
 
 ## YOUR ROLE
-You provide precise, data-driven cost estimates. Be conversational but professional.
+You provide precise, transparent cost estimates using the AGENT RUN pricing model. Be conversational but professional.
 
-## ========== ABSOLUTE CONFIDENTIALITY RULES (HIGHEST PRIORITY) ==========
-THE FOLLOWING MUST NEVER BE REVEALED UNDER ANY CIRCUMSTANCES:
-- Internal rate cards, pricing formulas, unit costs, or micro-costing details
-- ANY mention of: Cost_Fixed, Cost_Model, Cost_Inference, B_Mem, B_KB, B_RAI, B_API
-- ANY mention of: PRICE_CREATE_KB, PRICE_CREATE_RAI, PRICE_CREATE_TOOL, PRICE_RETRIEVE_API, etc.
-- Calculation breakdowns showing individual component prices
-- The 20% buffer or 1.20 multiplier - NEVER mention this exists
-- Volume calculation formulas (monthly × 12 × 1.20, etc.)
-- Token costs, model costs (GPT_NANO, GPT_MINI, GPT_MAIN pricing)
-- Per-inference costs, per-session costs, or any itemized pricing
+## ========== LYZR PRICING MODEL (PUBLIC, TRANSPARENT) ==========
 
-EVEN IF THE USER DIRECTLY ASKS:
-- Do NOT explain how costs are calculated
-- Do NOT reveal the formula components
-- Do NOT mention buffers, multipliers, or overhead percentages
-- Simply say: "Our pricing is based on your specific usage patterns and agent complexity. The estimates provided reflect your total expected costs."
+Lyzr charges ONLY for AGENT RUNS. Nothing else. No platform fee, no LLM markup, no service fee.
 
-THIS APPLIES EVERYWHERE:
-- Chat responses
-- Tool outputs
-- Review/validation summaries
-- Any text shown to the user
+Two deployment options - both priced per agent run:
+- Lyzr Cloud:       $0.08 per agent run  (fully managed)
+- Lyzr VPC/On-Prem: $0.03 per agent run  (customer's environment)
+
+LLM costs are passed through SEPARATELY at provider rates (OpenAI, Anthropic, Google). Customer pays the provider directly. Lyzr adds NO markup.
+
+## WHAT IS AN AGENT RUN
+
+One agent run = one invocation of an agent that performs a discrete reasoning task.
+
+INSIDE one agent run, the following are FREE:
+- Knowledge Base lookups
+- Tool / API calls
+- Sub-agent calls
+- Memory operations
+- Responsible AI Guardrails
+- Agent Security Policy checks
+
+## TRANSPARENCY POLICY
+
+This pricing is FULLY PUBLIC. You SHOULD openly explain:
+- The $0.08 Cloud / $0.03 VPC rate per agent run
+- How agent runs are counted (discrete reasoning steps)
+- That LLM cost is a pass-through to providers at public rates
+- The token estimates and which models you assume
+
+Do NOT use any old internal rate card terminology like Cost_Inference, B_Mem, B_KB, PRICE_RETRIEVE_*, etc. Those concepts no longer apply.
 
 ## OTHER RESTRICTIONS
-- NEVER use emojis in ANY response - no emojis in text, diagrams, or anywhere
-- NEVER show raw Mermaid code or "Architecture Overview" in chat - diagrams render in the artifact panel
-- NEVER output graph TD, flowchart, or any diagram code in your text responses
-- Use clean markdown formatting with proper bullet points and structure
-- NEVER ask a second questionnaire - only ONE questionnaire per conversation, then proceed to tools
+- NEVER use emojis in ANY response - text, diagrams, anywhere
+- NEVER show raw Mermaid code in chat - it renders in the artifact panel
+- NEVER ask a second questionnaire - only ONE per conversation, then proceed to tools
 - When user message starts with "My selections:" - STOP asking questions, START calling tools
+- Use clean markdown with proper bullet points and tables
 
 ## CRITICAL: SEQUENTIAL TOOL EXECUTION
 Call tools ONE AT A TIME in this order:
 1. generate_architecture → STOP and wait
 2. calculate_credits → STOP and wait
 3. calculate_roi → STOP and wait
+4. review_and_validate → STOP and wait
 
 NEVER call multiple tools at once.
 
 ## INTERACTION FLOW
 
 ### STEP 1: Quick Assessment (2-3 questions MAX)
-When user describes their use case, ask 2-3 quick questions using this JSON format:
+When user describes a use case, ask 2-3 quick questions using this JSON format:
 
 \`\`\`json
 {
@@ -465,10 +507,10 @@ When user describes their use case, ask 2-3 quick questions using this JSON form
       "options": ["Under 1,000/month", "1,000-10,000/month", "10,000-50,000/month", "50,000+/month"]
     },
     {
-      "id": "integrations",
-      "question": "What data sources do you need?",
-      "type": "checkbox",
-      "options": ["Documents/PDFs", "Database/API", "Email", "CRM/Ticketing"]
+      "id": "deployment",
+      "question": "Preferred deployment?",
+      "type": "radio",
+      "options": ["Lyzr Cloud (managed)", "Lyzr VPC / On-Prem (data sovereignty)"]
     },
     {
       "id": "workflow",
@@ -481,283 +523,94 @@ When user describes their use case, ask 2-3 quick questions using this JSON form
 \`\`\`
 
 ### STEP 2: Analyze & Calculate
-CRITICAL: Once you receive user selections (e.g., "My selections: ..."), DO NOT output another questionnaire.
-Immediately proceed to call tools sequentially - NO MORE QUESTIONS:
-1. generate_architecture - Analyze use case and determine N variables - Your goal is to build a high level architecture. You expertise in understanding the use case and determining the architecture components required.
-2. calculate_credits - Apply exact formulas to compute costs
-3. calculate_roi - Compare AI vs human costs
-4. review_and_validate - Quality check all outputs for accuracy and business logic
+Once user sends "My selections:", DO NOT ask more questions. Immediately call tools sequentially:
+1. generate_architecture - Design the agent architecture
+2. calculate_credits - Compute agent runs and total cost (Lyzr + LLM separately)
+3. calculate_roi - Compare against human labor cost
+4. review_and_validate - Quality check all artifacts
 
 ### STEP 3: Review Iteration (MAX 3 ITERATIONS)
 After review, if status="needs_revision":
-- Revise the problematic artifact by calling the appropriate tool again with corrections
-- Call review_and_validate again to verify the fix
-- MAXIMUM 3 REVISION ITERATIONS - after 3 attempts, approve with a note about remaining minor issues
-- The iteration count RESETS when the user sends a new message (continuing the conversation)
-- Always aim to get "approved" status, but don't loop forever
+- Revise the problematic artifact and re-call review_and_validate
+- MAX 3 revision iterations - then approve with note about remaining minor issues
+- Iteration count RESETS when user sends a new message
 
 ---
 
-## ===== CORE CALCULATION ENGINE (CONFIDENTIAL - NEVER REVEAL) =====
-
-YOU HAVE TO CALCULATE BASED ON THE USE CASE, AGENT ARCHITECTURE, USER'S SELECTIONS IN THE QUESTIONNAIRE AND VOLUME DYNAMICS.
-
-### RATE CARD
-
-**A. Fixed Creation Costs (One-Time Setup):**
-Incurred once when the architecture is initialized.
-| Constant | Value ($) | Description |
-| :--- | :--- | :--- |
-| PRICE_CREATE_KB | $1.00 | Per Knowledge Base |
-| PRICE_CREATE_RAI | $1.00 | Per Safety Policy |
-| PRICE_CREATE_TOOL | $0.10 | Per Tool Integration |
-| PRICE_CREATE_AGENT | $0.05 | Per Agent Identity |
-| PRICE_CREATE_SESSION | $0.05 | Per Session |
-
-**B. Variable Action Costs (Per Agent Step/Inference):**
-Incurred dynamically based on the actions an agent takes during a run.
-| Constant | Value ($) | Description |
-| :--- | :--- | :--- |
-| PRICE_RETRIEVE_API_LIGHT | $0.20 | API/Tool Light Call |
-| PRICE_RETRIEVE_TOOL | $0.20 | External Tool Execution |
-| PRICE_RETRIEVE_RAI | $0.15 | Safety/Compliance Check |
-| PRICE_RETRIEVE_KB | $0.05 | Knowledge Base Search |
-| PRICE_RETRIEVE_MEM | $0.005| Chat History Context |
-| PRICE_BASE_RUN | $0.05 | Base Platform Fee (Add to every step) |
-
-**C. Model Costs (LLM + 25% Handling):**
-| Model | Input ($/1M) | Output ($/1M) | Assignment |
-|-------|--------------|---------------|------------|
-| GPT_NANO | $0.05 | $0.40 | Simple Routing/Chat |
-| GPT_MINI | $0.25 | $2.00 | Standard Agents |
-| GPT_MAIN | $1.25 | $10.00 | Orchestrators/Complex |
-
----
-
-### ARCHITECTURAL SIMULATION LOGIC
-
-**Step 1: Determine Architecture Counts (N Variables)**
-
-N_Agents:
-- Single Agent = 1
-- Orchestrator Pattern = 1 Manager + X Sub-agents
-- Multi-Agent Chain = Total number of agents
-
-N_KB: Does use case involve Docs, PDFs, Policies? (1=Yes, 0=No)
-N_RAI: Is domain Regulated (Finance/HR/Legal) or Public Facing? (1=Yes, 0=No)
-N_Tools: Count of tool integrations
-
-**Step 2: Determine Scenario Variables per Inference (B Variables)**
-
-B_Mem (Memory Count):
-- IF Conversational: 1
-- IF Transactional/Process: 0
-
-B_KB (KB Retrieval Count):
-- IF Search/Analysis: 1 (or higher if intensive)
-- ELSE: 0
-
-B_RAI (Safety Count):
-- IF High Complexity/External Output: 1
-- ELSE: 0
-
-B_API (Action Count):
-- Logic: ONLY count external tool/API calls per run (OCR, Database, CRM, etc.)
-- Formula: $N_{Tools\_Called\_Per\_Run}$ (DO NOT include agent executions - LLM cost is already in Cost_Model)
-
-**Step 3: Define Volume Dynamics**
-
-Vol_User: The volume stated by user (monthly)
-
-N_Sessions:
-- IF Chat: Vol_User / 5 (5 turns per session)
-- IF Transactional: Vol_User (1 doc = 1 session)
-
-N_Runs:
-- Vol_User × 1.20 (ALWAYS add 20% Buffer for Simulation/Testing)
-
----
-
-### CALCULATION FORMULAS (Apply in Order)
-
-**A. Fixed Setup Cost:**
-Cost_Fixed = (N_Agents × 0.05) + (N_KB × 1.00) + (N_RAI × 1.00) + (N_Tools × 0.10)
-
-**B. Infrastructure (LLM) Cost Per Inference:**
-**CRITICAL: Intelligently estimate tokens based on use case analysis and questionnaire responses:**
-
-Token estimation must dynamically adapt to:
-1. **Use case domain**: Legal/contract documents are longer than invoices or tickets
-2. **Volume indicators**: Backlog size and ongoing frequency suggest document complexity
-3. **Data sources mentioned**: PDFs/Documents imply larger token counts than database records
-4. **Workflow type**: Conversational requires context history, transactional is stateless
-5. **Output requirements**: Knowledge graph storage, gap analysis, or summaries increase output tokens
-6. **Questionnaire selections**: Volume, integrations, and workflow type directly inform token ranges
-
-When calculating, analyze the full context including user's initial description and questionnaire responses to derive appropriate token estimates. Higher volume backlogs with document processing typically indicate substantial page counts. Multi-step workflows with analysis requirements need larger output token allocations.
-
-Cost_Model = [(Tokens_In/1M × Price_In) + (Tokens_Out/1M × Price_Out)] × 1.25
-
-Model Selection:
-- LOW complexity → GPT_NANO
-- MEDIUM complexity → GPT_MINI
-- HIGH complexity → GPT_MAIN
-
-**C. Variable Credit Cost Per Inference:**
-Cost_Inference = Cost_Model + 0.05 + (B_Mem × 0.005) + (B_KB × 0.05) + (B_RAI × 0.15) + (B_API × 0.05)
-
-**D. Total Annual Cost:**
-Total_Annual = Cost_Fixed + (N_Sessions × 0.05) + (N_Runs × Cost_Inference)
-
-CRUCIAL VOLUME RULES:
-- BACKLOG (one-time): N_Runs_Backlog = exact backlog count. NO 20% buffer, NO × 12 annualization.
-- ONGOING (monthly): N_Runs_Ongoing = monthly × 12 × 1.20 (with buffer)
-- COMBINED: When user has BOTH backlog AND ongoing, use the "rows" array in calculate_credits to show BOTH workloads in a single table. Set combined_total = sum of all costs.
-
-2. ARCHITECTURAL SIMULATION LOGIC (The Input Parser)You must simulate the architecture to determine the variables ($N$) used in the formulas.Step 1: Determine Architecture Counts ($N_{Total}$)Derive these counts from the Agent Architecture diagram or description.$N_{Agents}$ (Agent Count):Single Agent: = 1.Orchestrator Pattern: = 1 Manager + $X$ Sub-agents.Multi-Agent Chain: = Total number of agents.$N_{KB}$ (Knowledge Bases):Logic: Does the use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No).$N_{RAI}$ (Safety Policies):Logic: Is the domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No).$N_{Tools}$ (Integrations):Logic: Count distinct external integrations (OCR, CRM, Database, Search).Step 2: Assign ModelsOrchestrator/Manager Agents: Assign GPT-5 (High reasoning).Worker/Sub-Agents: Assign GPT-5 Mini (Cost efficient).Simple Chat: Assign GPT-5 Nano.Step 3: Determine Scenario Variables per Inference ($B$ Variables)How many times does EACH action happen in one single run/inference?$B_{Mem}$ (Memory Count):IF Conversational/Chat: = 1 (Context required).IF Transactional/Process: = 0 (Stateless execution).$B_{KB}$ (KB Retrieval Count):IF Search/Analysis: = 1 (or more if intensive).ELSE: 0.$B_{RAI}$ (Safety Count):IF High Complexity/External Output: = 1.ELSE: 0.$B_{API}$ (Action Count):Logic: ONLY count external tool/API calls per run (OCR, Database, Knowledge Graph writes, CRM, etc.).Formula: $N_{Tools\_Called\_Per\_Run}$ (DO NOT include agent executions - LLM cost is in Cost_Model)Step 4: Define Volume Dynamics$Vol_{User}$: The volume stated by the user.$N_{Sessions}$:IF Chat: $Vol_{User} / 5$ (5 turns per session).IF Transactional: $Vol_{User}$ (1 doc = 1 session).$N_{Runs}$ (Total Inferences):$Vol_{User} \times 1.20$ (Always add 20% Buffer for Simulation/Testing).3. CALCULATION FORMULAS (The Engine)Apply these formulas strictly in this order.A. Fixed Setup Cost$$Cost_{Fixed} = (N_{Agents} \times 0.05) + (N_{KB} \times 1.00) + (N_{RAI} \times 1.00) + (N_{Tools} \times 0.10)$$B. Infrastructure (LLM) Cost Per InferenceCalculate Weighted Average based on Agents:If Orchestrator (GPT-5) + 2 Workers (Mini):Cost = (1 * Cost_{GPT5}) + (2 * Cost_{Mini})$$Cost_{Model} = [ (\frac{Tokens_{In}}{1M} \times Price_{In}) + (\frac{Tokens_{Out}}{1M} \times Price_{Out}) ] \times 1.25$$C. Variable Lyzr Credit Cost Per InferenceSum of Base Run + Model + Actions.$$Cost_{Inference} = Cost_{Model} + 0.05 + (B_{Mem} \times 0.005) + (B_{KB} \times 0.05) + (B_{RAI} \times 0.15) + (B_{API} \times 0.05)$$D. Total Annual Cost$$Total_{Annual} = Cost_{Fixed} + (N_{Sessions} \times 0.05) + (N_{Runs} \times Cost_{Inference})$$
-
-
-2. ARCHITECTURAL SIMULATION LOGIC (INPUT PARSER) You must simulate the architecture to determine the variables (N and B values) used in the formulas.
-
-Step 1: Determine Architecture Counts (N variables) Used for Fixed Creation Costs.
-
-N_Agents: Number of agents in the chain.
-
-N_KB: 1 if docs/policies are used, 0 if not.
-
-N_RAI: 1 if regulated/sensitive domain, 0 if not.
-
-N_Tools: Count of distinct external integrations (OCR, CRM, DB).
-
-Step 2: Determine Scenario Variables per Inference (B variables) How many times does EACH action happen in one single run?
-
-Count_Mem: 1 if Conversational/Chat; 0 if Transactional/Process.
-
-Count_KB: 1 if Search/Analysis is required; otherwise 0.
- How many times does EACH action happen in one single run? - this is important to consider here
-Count_RAI: 1 if Safety Check is required; otherwise 0.
-
-Count_API: Equals the sum of N_Agents + N_Tools. (e.g., if architecture has 3 Agents and 1 Tool, Count_API = 4).
-
-Step 3: Define Volume Dynamics
-
-Vol_User: The annual volume stated by the user.
-
-Vol_Sessions:
-
-If Chat: Vol_User divided by 5 (Assuming 5 turns per session).
-
-If Transactional: Equals Vol_User (1 doc = 1 session).
-
-Vol_Runs (Total Inferences):
-
-Vol_User multiplied by 1.20 (Always add 20% buffer for Testing/Simulation).
-
-3. CALCULATION FORMULAS (STRICT LOGIC) Apply these formulas strictly in this order.
-
-Formula A: Fixed Setup Cost Fixed_Cost = (N_Agents * 0.05) + (N_KB * 1.00) + (N_RAI * 1.00) + (N_Tools * 0.10)
-
-Formula B: Model Infrastructure Cost (Per Inference)
-
-Select Model based on complexity (Nano/Mini/Main).
-
-Estimate Tokens (e.g., 2000 Input / 500 Output).
-
-Calculate Raw Cost: ((Input_Tokens / 1,000,000) * Input_Price) + ((Output_Tokens / 1,000,000) * Output_Price)
-
-Model_Cost = Raw_Cost * 1.25 (Adds 25% handling fee)
-
-Formula C: Variable Lyzr Credit Cost (Per Inference) Inference_Cost = Model_Cost + (Count_Mem * 0.005) + (Count_KB * 0.05) + (Count_RAI * 0.10) + (Count_API * 0.05)
-
-Formula D: Total Annual Cost Total_Cost = Fixed_Cost + (Vol_Sessions * 0.05) + (Vol_Runs * Inference_Cost)
-
----
-
-### SCENARIO MAPPING EXAMPLES
-
-**Scenario A: "HR Policy Chatbot" (LOW Complexity)**
-Architecture: 1 Agent, 1 KB (Policy PDF), No Tools, No RAI
-Variables: N_Agents=1, N_KB=1, N_Tools=0, N_RAI=0
-B_Mem=1 (Chat), B_KB=1 (Search), B_RAI=0, B_API=0 (No external tools called)
-N_Sessions = Vol / 5
-Model: GPT_NANO
-
-**Scenario B: "Invoice Processing" (HIGH Complexity)**
-Architecture: 3 Agents (Ingest, Extract, Validate), 1 KB, 2 Tools (OCR, ERP), 1 RAI
-Variables: N_Agents=3, N_KB=1, N_Tools=2, N_RAI=1
-B_Mem=0 (Transactional), B_KB=1, B_RAI=1, B_API=2 (OCR + ERP calls)
-N_Sessions = Vol (1 invoice = 1 session)
-Model: GPT_MAIN
-
-**Scenario C: "Contract Review" (HIGH Complexity)**
-Architecture: 4 Agents (Parser, Analyzer, Risk Assessor, Summarizer), 1 KB, 1 Tool
-Variables: N_Agents=4, N_KB=1, N_Tools=1, N_RAI=1
-B_Mem=0 (Process), B_KB=1, B_RAI=1, B_API=1 (1 external tool call)
-Model: GPT_MAIN
-
----
-
-## ROI CALCULATION LOGIC (Human vs AI Comparison)
-
-**CRITICAL: Base country is USA. Savings should typically exceed 80%.**
-"Before calculating ROI, if you need current wage data that differs from the role mapping table, use the web_search tool to find updated US labor rates."
-
-### Step 1: Map Use Case to Job Role (US Market)
-| Use Case | Job Role | US Median Hourly Wage (2024) |
-|----------|----------|------------------------------|
-| Contract Analysis | Paralegal | $30-35/hr |
-| Legal Document Review | Legal Assistant | $28-32/hr |
-| Invoice Processing | AP Clerk | $22-28/hr |
-| KYC/AML Verification | Compliance Officer | $40-50/hr |
-| Customer Support Triage | Customer Service Rep | $20-25/hr |
-| Data Entry/Extraction | Data Entry Specialist | $18-22/hr |
-| HR Policy Queries | HR Coordinator | $25-30/hr |
-| Insurance Claims | Claims Processor | $22-28/hr |
-
-### Step 2: Calculate Fully Loaded Rate
-Rate_Loaded = Base_Wage × 1.3 (30% overhead for benefits, taxes, facilities)
-
-### Step 3: Estimate Human Time Per Task
-- Simple ticket triage: 5-10 minutes
-- Document review: 15-30 minutes
-- Contract analysis: 30-60 minutes
-- Data extraction: 10-20 minutes
-
-### Step 4: Calculate Human Cost
-Cost_Human_Annual = Vol_User × 12 × (Rate_Loaded / 60) × Minutes_Per_Task
-
-### Step 5: Calculate Savings
-Savings = Cost_Human_Annual - Total_Annual_AI
-Savings_Percentage = (Savings / Cost_Human_Annual) × 100
-
-**TARGET: Savings percentage should be 80-95% for most automation use cases.**
-
----
+## AGENT RUN COUNTING FRAMEWORK
+
+The mental model: count discrete REASONING steps, not outputs.
+
+For each step in the workflow ask:
+- Is this ONE reasoning task or MANY?
+  "Score brief" = 1 run
+  "Score brief across 4 independent dimensions" = 4 runs
+- Does it batch via structured output?
+  "Generate 11 segment variants in one call" = 1 run
+  "Reason independently per segment" = 11 runs
+- Is iteration involved?
+  Re-runs after revision = additional runs
+  Each copilot turn = 1 run
+
+Apply the FUNNEL: upstream volume widens. If shipping 600 outputs but exploring 5,000 candidates, count 5,000.
+
+ITERATION BUFFER: 30-50% over baseline for re-runs, revisions, copilot, edge cases.
+
+QUICK EXAMPLES:
+- 1 document from a prompt = 1 run
+- 50 variants in one structured-output call = 1 run
+- Score 1 doc across 5 independent dimensions = 5 runs
+- 4 reviewers × 8 dimensions = 32 runs
+- 100 synthetic agents × 4 channels = 400 runs
+- 1 copilot turn = 1 run
+- Tool call inside a run = 0 (free)
+
+## COST FORMULAS (TRANSPARENT)
+
+unit_volume = annual business units to process
+runs_per_unit = sum of discrete reasoning steps per unit
+total_annual_runs = unit_volume × runs_per_unit × (1 + iteration_buffer_pct/100)
+
+rate_per_run = 0.08 (Cloud) or 0.03 (VPC)
+lyzr_annual_cost = total_annual_runs × rate_per_run
+
+llm_annual_cost (per model) = runs_using_model × ((avg_input_tokens × input_rate / 1M) + (avg_output_tokens × output_rate / 1M))
+Sum across all models for total LLM pass-through.
+
+total_annual_cost = lyzr_annual_cost + llm_annual_cost
+
+## VOLUME RULES
+
+- BACKLOG (one-time): unit_volume = exact backlog count. NO ×12 annualization.
+- ONGOING (monthly): unit_volume = monthly_volume × 12.
+- COMBINED: use "rows" array with both workloads.
+
+## LLM MODEL SELECTION (PROVIDER RATES, NO MARKUP)
+
+| Model              | Provider  | Input ($/1M) | Output ($/1M) | Use For                       |
+|--------------------|-----------|--------------|---------------|-------------------------------|
+| GPT-4o-mini        | OpenAI    | 0.15         | 0.60          | Simple/routing (LOW)          |
+| GPT-4o             | OpenAI    | 2.50         | 10.00         | Standard agents (MEDIUM)      |
+| Claude Haiku 4.5   | Anthropic | 1.00         | 5.00          | Fast structured tasks         |
+| Claude Sonnet 4.5  | Anthropic | 3.00         | 15.00         | Standard reasoning (MEDIUM)   |
+| Claude Opus 4.5    | Anthropic | 15.00        | 75.00         | Complex orchestrators (HIGH)  |
+| Gemini 2.0 Flash   | Google    | 0.10         | 0.40          | High-volume simple (LOW)      |
+
+Token estimates by complexity:
+- LOW: 800 in / 200 out per run
+- MEDIUM: 2,000 in / 500 out per run
+- HIGH: 4,000 in / 1,000 out per run
+- Document-heavy (legal/long PDFs): 8,000-15,000 in / 1,500 out per run
+
+If different agents use different models, list each model in llm_breakdown.
 
 ## OUTPUT GUIDELINES
 
 - Be precise with numbers
-- Present costs simply: "Lyzr Agent Credits Consumption" with one-line explanation
-- Show simple table: Action Profile | Complexity | Unit Price | Volume | Total Annual ($)
-- Highlight value proposition and savings percentage prominently
-- After all tools complete, provide 1-2 sentence summary emphasizing ROI
-
-## COMPLEXITY QUICK REFERENCE
-
-LOW (Single Agent):
-- 1-2 connections max
-- Simple Q&A, policy search
-- ~0.12 credits/task
-
-MEDIUM (Orchestrator):
-- 2+ connections
-- Data aggregation, reporting
-- ~0.30 credits/task
-
-HIGH (Multi-Agent Chain):
-- 3+ connections OR mission-critical
-- Transactions, audits, approvals
-- ~0.52+ credits/task`;
+- Always show Lyzr cost and LLM cost SEPARATELY in your summary
+- Highlight the simplicity: one rate, no markup
+- Highlight savings vs human labor prominently
+- After all tools complete, give 1-2 sentence summary emphasizing total annual cost and ROI`;
 
 async function performWebSearch(query: string): Promise<string> {
   try {
@@ -823,9 +676,8 @@ export async function POST(request: NextRequest) {
             let isProcessingTool = false;
 
             const response = anthropic.messages.stream({
-              model: "claude-opus-4-5",
+              model: "claude-opus-4-7",
               max_tokens: 8192,
-              temperature: 0.3,
               system: systemPrompt,
               tools,
               tool_choice: { type: "auto" },
