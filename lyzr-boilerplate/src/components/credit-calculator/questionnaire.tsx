@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { IconSend, IconCheck } from "@tabler/icons-react";
@@ -10,8 +11,11 @@ import { IconSend, IconCheck } from "@tabler/icons-react";
 interface Question {
   id: string;
   question: string;
-  type: "radio" | "checkbox";
-  options: string[];
+  type: "radio" | "checkbox" | "number";
+  options?: string[];
+  placeholder?: string;
+  unit?: string;
+  helper?: string;
 }
 
 interface QuestionnaireData {
@@ -48,6 +52,11 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
     });
   };
 
+  const handleNumberChange = (questionId: string, value: string) => {
+    if (isSubmitted) return;
+    setResponses((prev) => ({ ...prev, [questionId]: value }));
+  };
+
   const handleSubmit = () => {
     onSubmit(responses, data.questions.map(q => ({ id: q.id, question: q.question })));
   };
@@ -56,6 +65,9 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
     const answer = responses[q.id];
     if (q.type === "radio") {
       return !!answer;
+    }
+    if (q.type === "number") {
+      return typeof answer === "string" && answer.trim() !== "" && !isNaN(Number(answer)) && Number(answer) >= 0;
     }
     return Array.isArray(answer) && answer.length > 0;
   });
@@ -70,14 +82,46 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
             {question.question}
           </Label>
           
-          {question.type === "radio" ? (
+          {question.helper && (
+            <p className="text-xs text-muted-foreground">{question.helper}</p>
+          )}
+
+          {question.type === "number" ? (
+            isSubmitted ? (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 py-2 px-3">
+                <IconCheck className="h-4 w-4 text-primary flex-shrink-0" />
+                <span className="text-sm">
+                  {Number(responses[question.id] as string).toLocaleString()}
+                  {question.unit ? ` ${question.unit}` : ""}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  placeholder={question.placeholder || "e.g. 10000"}
+                  value={(responses[question.id] as string) || ""}
+                  onChange={(e) => handleNumberChange(question.id, e.target.value)}
+                  className="h-9"
+                />
+                {question.unit && (
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    {question.unit}
+                  </span>
+                )}
+              </div>
+            )
+          ) : question.type === "radio" ? (
             <RadioGroup
               value={responses[question.id] as string || ""}
               onValueChange={(value) => handleRadioChange(question.id, value)}
               className="grid grid-cols-2 gap-1.5"
               disabled={isSubmitted}
             >
-              {question.options.map((option) => {
+              {(question.options ?? []).map((option) => {
                 const isSelected = responses[question.id] === option;
                 if (isSubmitted && !isSelected) return null;
                 return (
@@ -109,7 +153,7 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
             </RadioGroup>
           ) : (
             <div className="grid grid-cols-2 gap-1.5">
-              {question.options.map((option) => {
+              {(question.options ?? []).map((option) => {
                 const isChecked = ((responses[question.id] as string[]) || []).includes(option);
                 if (isSubmitted && !isChecked) return null;
                 return (
