@@ -52,8 +52,8 @@ export function LandingPage({
 
   return (
     <div className="w-full bg-background overflow-y-auto h-screen">
-      <div className="min-h-[70vh] flex items-center justify-center">
-        <div className="w-full max-w-4xl px-6 py-8 -mt-16">
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-full max-w-4xl px-6 py-8">
           <div className="flex flex-col items-center text-center mb-10">
             <Image
               src="https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png"
@@ -108,11 +108,6 @@ export function LandingPage({
               onClick={() => setInput("I need to analyze legal contracts and extract key terms - about 50 contracts per week")} 
             />
           </div>
-
-          <p className="mt-12 text-center text-[18px] text-muted-foreground italic max-w-2xl mx-auto">
-            $0.08 per agent run on Lyzr Cloud (or $0.03 on VPC).
-            LLM costs are passed through at provider rates — no markup, no platform fee.
-          </p>
         </div>
       </div>
 
