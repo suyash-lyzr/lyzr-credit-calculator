@@ -116,25 +116,6 @@ export function LandingPage({
         </div>
       </div>
 
-      {templates.length > 0 && (
-        <div className="w-full max-w-4xl mx-auto px-6 pb-16">
-          <h3 className="text-lg font-semibold text-foreground mb-6 text-center">Common use cases</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {templates.slice(0, 6).map((template) => (
-              <TemplateCard
-                key={template.id}
-                template={template}
-                onClick={() => onLoadTemplate?.(template)}
-              />
-            ))}
-          </div>
-          {templates.length > 6 && (
-            <p className="mt-4 text-xs text-muted-foreground text-center">
-              Press Cmd+Shift+S to view all {templates.length} saved use cases
-            </p>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -151,7 +132,8 @@ function ExampleChip({ text, onClick }: { text: string; onClick: () => void }) {
   );
 }
 
-function TemplateCard({ template, onClick }: { template: SavedTemplate; onClick: () => void }) {
+// Kept for use elsewhere (e.g. template manager modal)
+export function TemplateCard({ template, onClick }: { template: SavedTemplate; onClick: () => void }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = React.useState<string>("");
 
