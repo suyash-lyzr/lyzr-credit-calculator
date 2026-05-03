@@ -39,8 +39,18 @@ export interface ArchitectureData {
 
 export interface AgentRunStep {
   step_name: string;
+  phase?: "discovery" | "validation" | "processing" | "review" | "delivery" | "monitoring";
   runs: number;
+  iteration_multiplier?: number;
+  effective_runs?: number;
   reasoning: string;
+}
+
+export interface PhaseBreakdownRow {
+  phase: string;
+  runs: number;
+  pct_of_total: number;
+  note?: string;
 }
 
 export interface LLMModelBreakdown {
@@ -89,6 +99,27 @@ export interface CreditCalculation {
 
   workload_name: string;
   unit_volume: number;
+
+  // --- New realistic volume model (all optional for back-compat) ---
+  use_case_category?: string;
+  funnel_multiplier?: number;
+  funnel_rationale?: string;
+  effective_unit_volume?: number;
+
+  base_runs_per_unit?: number;
+  effective_runs_per_unit?: number;
+
+  steady_state_annual_runs?: number;
+  continuous_ops_pct?: number;
+  continuous_ops_runs?: number;
+  onboarding_pct?: number;
+  onboarding_runs?: number;
+  edge_buffer_runs?: number;
+
+  phase_breakdown?: PhaseBreakdownRow[];
+  volume_breakdown_note?: string;
+
+  // --- Existing fields ---
   runs_per_unit: number;
   runs_breakdown: AgentRunStep[];
   iteration_buffer_pct: number;

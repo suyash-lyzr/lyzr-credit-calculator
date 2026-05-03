@@ -110,23 +110,87 @@ One agent run = one billable unit, regardless of how much work happens inside it
 
 === HOW TO COUNT AGENT RUNS PER USE CASE ===
 
-Step 1: Map the use case as a workflow. Break it into discrete reasoning steps.
-Step 2: For each step ask:
-  - Is this ONE reasoning task or many?
-    "Score this brief" = 1 run
-    "Score this brief across 4 independent quality dimensions" = 4 runs
-  - Does it batch via structured output?
-    "Generate 11 segment variants in one structured output" = 1 run
-    "Reason independently about each segment, then generate" = 11 runs
-  - Is iteration involved?
-    Re-runs after revision = additional runs
-    Each copilot conversation turn = 1 run
+CRITICAL MENTAL MODEL: The number a user gives you (e.g. "200 contracts/month") is almost always
+the SUCCESSFUL FINAL OUTPUT at the bottom of a funnel. The real workload is much larger because:
+  (a) FUNNEL — to ship 200 successful outputs the system processes more candidates upstream
+      (rejections, reroutes, escalations, classification dead-ends).
+  (b) ITERATION — each step rarely passes first time; revision loops, re-checks, exception
+      handling, human-in-the-loop back-and-forth all multiply runs per stage.
+  (c) ONBOARDING (Year 1) — calibration, skill validation, past-data ingestion, UAT, test runs.
+  (d) CONTINUOUS OPS — copilot conversations, KB updates, monitoring, performance tuning,
+      cross-workflow intelligence (each copilot turn = 1 run).
 
-Step 3: Apply the FUNNEL. Volume widens upstream.
-  Example: ship 600 final outputs but system explored 5,000 candidates upstream → count 5,000.
+Treating use cases as flat deterministic pipelines under-counts runs by 3-10x. Customers' own
+ops teams will know their reject rates and iteration overhead — your number must be defensible.
 
-Step 4: Add ITERATION BUFFER (30-50% over baseline).
-  Real workflows include re-runs, revision rounds, copilot turns, edge case handling.
+Step 1: Map the workflow into discrete reasoning steps. Tag each step with a phase
+        (discovery / validation / processing / review / delivery / monitoring).
+
+Step 2: For each step set:
+  - runs (base runs per unit at first attempt)
+  - iteration_multiplier (1.0 = no rework, 1.2 = 20% redo, 2.0 = ~2 attempts avg, 3.0+ = heavy back-and-forth)
+  - reasoning (1 sentence justifying both numbers)
+  - effective_runs = runs × iteration_multiplier
+  Defaults by step type:
+     classification / routing      → iteration 1.05-1.15
+     extraction / parsing          → iteration 1.1-1.3
+     judgment / review / scoring   → iteration 1.3-1.6
+     drafting / generation         → iteration 1.5-2.5
+     validation against rules      → iteration 1.2-1.5
+     orchestration / planning      → iteration 1.2-1.4
+     critic / approval gate        → iteration 1.3-2.0
+
+Step 3: Apply the FUNNEL multiplier to volume.
+  funnel_multiplier ≥ 1, applied to user-stated unit_volume.
+  effective_unit_volume = unit_volume × funnel_multiplier
+  Use the defaults library below; explain in funnel_rationale.
+
+Step 4: STEADY-STATE math.
+  base_runs_per_unit       = sum(step.runs)
+  effective_runs_per_unit  = sum(step.runs × step.iteration_multiplier)
+  steady_state_annual_runs = effective_unit_volume × effective_runs_per_unit
+
+Step 5: CONTINUOUS OPS adder.
+  continuous_ops_pct (5-25%) — copilot turns, KB curation, monitoring, cross-workflow chats.
+  continuous_ops_runs = steady_state_annual_runs × continuous_ops_pct/100
+
+Step 6: YEAR-1 ONBOARDING adder.
+  onboarding_pct (15-30% in year 1, 0 once steady state) — skill validation, past-data ingestion,
+  brand/domain calibration, UAT cycles, test campaigns.
+  onboarding_runs = (steady_state_annual_runs + continuous_ops_runs) × onboarding_pct/100
+
+Step 7: OUTER edge-case buffer.
+  iteration_buffer_pct (10-20%) — outer safety margin for true edge cases NOT captured by
+  per-step iteration_multiplier (model outages, surge volume, novel inputs).
+  edge_buffer_runs = (steady_state + continuous_ops + onboarding) × iteration_buffer_pct/100
+
+Step 8: TOTAL.
+  total_annual_runs = steady_state_annual_runs + continuous_ops_runs + onboarding_runs + edge_buffer_runs
+
+Step 9: PHASE BREAKDOWN.
+  Group runs_breakdown by phase and emit phase_breakdown[] with runs, pct_of_total, and a short note.
+  This makes the number procurement-defensible and enables modular adoption ("start with phases 2-3").
+
+=== DEFAULTS LIBRARY BY USE CASE CATEGORY ===
+
+Pick the closest match, set use_case_category, and use these as starting points (adjust per
+specifics). These are based on real enterprise deployments — do NOT default to lower numbers.
+
+| Category                                                   | funnel_mult | per-step iter | continuous_ops | onboarding (Y1) |
+|------------------------------------------------------------|-------------|---------------|----------------|-----------------|
+| Document processing — high-throughput, structured          | 1.3 - 1.8   | 1.1 - 1.3     | 5 - 10%        | 15 - 20%        |
+| Document processing — judgment-heavy, regulated            | 1.5 - 2.5   | 1.5 - 2.0     | 10 - 15%       | 20 - 25%        |
+| Marketing campaigns — test-and-learn / creative            | 5.0 - 10.0  | 2.0 - 3.0     | 15 - 25%       | 20 - 30%        |
+| Customer service triage / support                          | 1.1 - 1.3   | 1.1 - 1.2     | 20 - 30%       | 10 - 15%        |
+| Decision workflows (CFO close, KYC, underwriting)          | 1.8 - 2.5   | 1.5 - 2.0     | 10 - 20%       | 20 - 30%        |
+| Real-time decisioning (next-best-action, fraud)            | 1.0 - 1.1   | 1.0 - 1.1     | 5 - 10%        | 10 - 15%        |
+| Research / analyst workflows (multi-source synthesis)      | 2.0 - 4.0   | 1.5 - 2.5     | 15 - 25%       | 20 - 30%        |
+| Code / engineering automation (review, refactor, tests)    | 1.5 - 3.0   | 2.0 - 3.0     | 15 - 25%       | 20 - 25%        |
+| Sales workflows (lead qual, outreach, enrichment)          | 2.0 - 5.0   | 1.3 - 1.8     | 15 - 25%       | 15 - 20%        |
+
+If the user only gave one volume number, ASSUME it is the successful-output bottom-of-funnel and
+apply the category default. If they explicitly said "we receive X documents and process Y", set
+funnel_multiplier = X/Y and skip the default. Always state your assumption in funnel_rationale.
 
 === QUICK CONVERSION EXAMPLES ===
   Generate one document from a prompt = 1 run
@@ -213,10 +277,14 @@ For each step:
   • input_rate_per_1m / output_rate_per_1m → from the pricing table above for the chosen model
   • cost_per_call       = (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000
   • cost_per_unit       = cost_per_call × runs_per_unit
-  • annual_calls        = runs_per_unit × unit_volume × (1 + llm_buffer_pct / 100)
+  • annual_calls        = the share of total_annual_runs attributable to this step × (1 + llm_buffer_pct / 100)
+                          where the share = (step.runs × step.iteration_multiplier × effective_unit_volume)
+                          scaled up by the same overhead factor used to expand steady_state → total_annual_runs
+                          (i.e. multiply by total_annual_runs / steady_state_annual_runs so continuous-ops,
+                          onboarding, and edge-case buffer all flow through proportionally).
   • annual_cost         = annual_calls × cost_per_call
 
-llm_buffer_pct: 30-50% (separate from agent-run iteration_buffer_pct). LLM buffer accounts for retries, self-correction loops, multi-sample generation, and tool-use iterations WITHIN a single agent run.
+llm_buffer_pct: 20-40% (separate from agent-run buffers). LLM buffer accounts for retries, self-correction loops, multi-sample generation, and tool-use iterations WITHIN a single agent run. Keep this LOWER than before since funnel/iteration/onboarding/continuous-ops are now modeled explicitly.
 
 llm_per_unit_cost = sum of cost_per_unit across all llm_steps
 llm_annual_cost   = sum of annual_cost across all llm_steps
@@ -231,7 +299,8 @@ For BACKLOG (one-time): use the exact backlog count as unit_volume. No buffer ne
 For ONGOING (monthly): unit_volume = monthly_volume × 12.
 For COMBINED: use the "rows" array to show BOTH workloads as separate rows.
 
-total_annual_runs = unit_volume × runs_per_unit × (1 + iteration_buffer_pct/100)
+total_annual_runs = steady_state_annual_runs + continuous_ops_runs + onboarding_runs + edge_buffer_runs
+(see Steps 3-8 above for the full waterfall — do NOT use the old flat formula.)
 
 === CALCULATION ===
 
@@ -270,29 +339,70 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
         },
 
         workload_name: { type: "string", description: "Name of the workload (e.g., 'Invoice Processing')" },
-        unit_volume: { type: "number", description: "Annual volume of business units (NOT agent runs)" },
-        runs_per_unit: { type: "number", description: "Discrete agent reasoning runs per single unit" },
+        unit_volume: { type: "number", description: "User-stated annual volume of successful business units (bottom-of-funnel output)" },
+
+        use_case_category: { type: "string", description: "Closest match from the defaults library (e.g., 'Document processing — judgment-heavy, regulated')" },
+        funnel_multiplier: { type: "number", description: "≥1. Ratio of upstream input volume to stated successful output volume. Use defaults library." },
+        funnel_rationale: { type: "string", description: "1-2 sentences on why this funnel multiplier (rejections, reroutes, escalations)" },
+        effective_unit_volume: { type: "number", description: "= unit_volume × funnel_multiplier" },
+
+        runs_per_unit: { type: "number", description: "DEPRECATED legacy field — set equal to effective_runs_per_unit" },
+        base_runs_per_unit: { type: "number", description: "Sum of step.runs across runs_breakdown (no iteration applied)" },
+        effective_runs_per_unit: { type: "number", description: "Sum of step.runs × step.iteration_multiplier across runs_breakdown" },
+
         runs_breakdown: {
           type: "array",
-          description: "List the discrete reasoning steps that make up runs_per_unit",
+          description: "Discrete reasoning steps. Each step MUST have an iteration_multiplier and effective_runs.",
           items: {
             type: "object",
             properties: {
-              step_name: { type: "string", description: "Name of the reasoning step (e.g., 'Triage', 'KB Lookup', 'Routing')" },
-              runs: { type: "number", description: "Agent runs for this step per unit" },
-              reasoning: { type: "string", description: "1 sentence explaining why this is N runs" },
+              step_name: { type: "string", description: "Name of the reasoning step" },
+              phase: {
+                type: "string",
+                enum: ["discovery", "validation", "processing", "review", "delivery", "monitoring"],
+                description: "Workflow phase this step belongs to",
+              },
+              runs: { type: "number", description: "Base agent runs per unit at first attempt" },
+              iteration_multiplier: { type: "number", description: "≥1. Avg attempts per unit for this step (rework, revision loops). Use the per-step-type defaults from the prompt." },
+              effective_runs: { type: "number", description: "= runs × iteration_multiplier" },
+              reasoning: { type: "string", description: "1 sentence justifying both runs and iteration_multiplier for this step" },
             },
-            required: ["step_name", "runs", "reasoning"],
+            required: ["step_name", "phase", "runs", "iteration_multiplier", "effective_runs", "reasoning"],
           },
         },
+
+        steady_state_annual_runs: { type: "number", description: "= effective_unit_volume × effective_runs_per_unit" },
+        continuous_ops_pct: { type: "number", description: "5-25%. Copilot turns, KB curation, monitoring, cross-workflow chats." },
+        continuous_ops_runs: { type: "number", description: "= steady_state_annual_runs × continuous_ops_pct/100" },
+        onboarding_pct: { type: "number", description: "15-30% in Year 1 (skill validation, past-data ingestion, calibration, UAT). 0 if customer says steady-state only." },
+        onboarding_runs: { type: "number", description: "= (steady_state_annual_runs + continuous_ops_runs) × onboarding_pct/100" },
+
         iteration_buffer_pct: {
           type: "number",
-          description: "Iteration buffer percent (30-50 typical) for re-runs, revisions, copilot, edge cases",
+          description: "OUTER edge-case buffer (10-20% typical). For surge volume, model outages, novel inputs NOT captured by per-step iteration_multiplier.",
         },
+        edge_buffer_runs: { type: "number", description: "= (steady_state + continuous_ops + onboarding) × iteration_buffer_pct/100" },
+
         total_annual_runs: {
           type: "number",
-          description: "= unit_volume × runs_per_unit × (1 + iteration_buffer_pct/100)",
+          description: "= steady_state_annual_runs + continuous_ops_runs + onboarding_runs + edge_buffer_runs",
         },
+
+        phase_breakdown: {
+          type: "array",
+          description: "Per-phase rollup of total_annual_runs grouped by phase. Enables modular adoption discussions.",
+          items: {
+            type: "object",
+            properties: {
+              phase: { type: "string" },
+              runs: { type: "number" },
+              pct_of_total: { type: "number", description: "% of total_annual_runs in this phase, 0-100" },
+              note: { type: "string", description: "1 short sentence on what happens in this phase" },
+            },
+            required: ["phase", "runs", "pct_of_total"],
+          },
+        },
+        volume_breakdown_note: { type: "string", description: "1-2 sentence summary of the volume model assumptions for this estimate" },
 
         lyzr_annual_cost: {
           type: "number",
@@ -389,8 +499,16 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
       },
       required: [
         "agent_architecture_summary", "deployment", "rate_per_run",
-        "workload_name", "unit_volume", "runs_per_unit", "runs_breakdown",
-        "iteration_buffer_pct", "total_annual_runs",
+        "workload_name", "unit_volume",
+        "use_case_category", "funnel_multiplier", "funnel_rationale", "effective_unit_volume",
+        "base_runs_per_unit", "effective_runs_per_unit",
+        "runs_per_unit", "runs_breakdown",
+        "steady_state_annual_runs",
+        "continuous_ops_pct", "continuous_ops_runs",
+        "onboarding_pct", "onboarding_runs",
+        "iteration_buffer_pct", "edge_buffer_runs",
+        "total_annual_runs",
+        "phase_breakdown",
         "lyzr_annual_cost",
         "llm_steps", "llm_buffer_pct", "llm_per_unit_cost", "llm_annual_cost",
         "total_annual_cost",

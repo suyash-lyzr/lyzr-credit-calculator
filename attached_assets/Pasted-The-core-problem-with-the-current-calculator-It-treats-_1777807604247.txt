@@ -1,0 +1,89 @@
+The core problem with the current calculator
+It treats the use case as a flat conversion: 100 documents → some multiplier → agent runs. That's wrong because it assumes:
+
+Every input becomes an output (no rejection, no re-run)
+One pass through the workflow per input (no iteration)
+The 100 inputs are the full work volume (no upstream funnel)
+
+In reality, every enterprise workflow has three layers of hidden volume that the current model misses entirely:
+
+The funnel above the output — to get 100 documents processed, the team likely receives 200-300 documents that need triage, rejection, or routing
+The iteration tail — each document doesn't pass first time; it goes through revision loops, re-checks, exception handling
+The pre-production work — testing, calibration, validation runs that happen before any "real" document is processed
+
+Your calculator currently captures none of these.
+What your calculator should add
+1. A funnel multiplier per use case
+Instead of "100 documents = X runs," ask:
+
+How many documents enter the system to produce 100 successfully processed ones?
+What's the rejection rate at each stage?
+How many get rerouted, escalated, or returned for resubmission?
+
+Improvement: add an "input volume" field separate from "successful output volume." The user enters both, the calculator infers the funnel ratio. If they only know one, the calculator should default to a sensible funnel multiplier based on use case category (document processing typically 1.5-2×, decision workflows 2-3×, exploratory/test-and-learn 5-10×).
+2. Iteration depth per stage
+For each stage of the workflow, ask:
+
+What's the average number of revision rounds before this stage's output is accepted?
+What % of items get re-processed, re-checked, or re-validated?
+How many back-and-forth cycles happen with humans or downstream teams?
+
+Improvement: each stage in the calculator should have an "iteration multiplier" with sensible defaults. Brief development might default to 2-3× (multiple revision rounds). Compliance review might default to 1.5× (some go back). Document classification might default to 1.1× (mostly first-pass).
+3. Pre-production / setup volume
+Year 1 always includes onboarding, calibration, testing — which the calculator should surface as a separate line:
+
+Skill validation runs
+Past data ingestion and indexing
+Brand / domain calibration
+UAT cycles
+Test campaigns or test cases
+
+Improvement: a "Year 1 onboarding" toggle that adds 15-25% to the steady-state number.
+4. Continuous platform work
+Even outside the use case workflow itself, the platform consumes runs:
+
+Copilot conversations (every turn = 1 run)
+Knowledge base updates
+Cross-workflow intelligence
+Performance monitoring
+Skill tuning
+
+Improvement: a "continuous operations" line that scales with team size and active usage — defaults from 5% to 20% of workflow runs depending on how interactive the use case is.
+5. Buffer logic that's transparent, not hidden
+Currently most calculators apply a flat % buffer that users don't see or understand. Better:
+
+Apply buffer per stage (not flat across total)
+Make the buffer % visible and adjustable
+Show what the buffer covers (re-runs, copilot, edge cases)
+Default to 30-50% with explanation
+
+6. Per-stage decomposition, not a single number
+The calculator should output a breakdown like the EE report, not just one final number:
+
+Phase 1 — X runs (Y% of total) — for validation / exploration
+Phase 2 — X runs (Y% of total) — for processing / generation
+Phase 3 — X runs (Y% of total) — for review / approval
+Phase 4 — X runs (Y% of total) — for production / delivery
+Phase 5 — X runs (Y% of total) — for monitoring / iteration
+
+This is what makes the number defensible to procurement and what enables modular adoption ("we can start with phases 2-3 only").
+A concrete redesign
+The calculator's input model should change from this:
+
+"How many documents per month? → multiplier → answer"
+
+To this:
+
+"What use case are you building?
+Step 1 — Map the workflow: what are the phases?
+Step 2 — For each phase: volume in, volume out, runs per unit, iteration multiplier
+Step 3 — Add: continuous ops %, copilot intensity, year 1 onboarding
+Step 4 — Buffer: per-phase, with rationale
+Step 5 — Output: total runs, % per phase, cost at $0.03 / $0.08, defensible breakdown"
+
+Defaults library (the most useful improvement)
+The single most valuable thing you can add is a defaults library by use case category, populated with realistic ranges from real deployments. Something like:
+Use case categoryFunnel multiplierIteration multiplierContinuous ops %Year 1 onboardingDocument processing (high-throughput, structured)1.3-1.8×1.1-1.3×5-10%15-20%Document processing (judgment-heavy, regulated)1.5-2.5×1.5-2×10-15%20-25%Marketing campaigns (test-and-learn)5-10×2-3×15-25%20-30%Customer service triage1.1-1.3×1.1-1.2×20-30%10-15%Decision workflows (CFO close, KYC, underwriting)1.8-2.5×1.5-2×10-20%20-30%Real-time decisioning (NBA, fraud)1.0× (no funnel)1.0-1.1×5%10-15%
+Users pick the closest match; the calculator pre-fills sensible numbers; they adjust from there.
+What this means practically
+The biggest gap in your current calculator is that it treats use cases as deterministic pipelines when they're actually probabilistic funnels with iteration. Every enterprise procurement conversation will eventually expose this — the customer's own ops team will know their reject rate, their iteration overhead, their pre-production testing volume, and they'll calculate a much higher number than your calculator produces. You then look like you're underestimating the platform's value.

@@ -34,24 +34,22 @@ export function ReviewValidation({ data, isLoading }: ReviewValidationProps) {
   return (
     <div className="space-y-4">
       <div className={`flex items-start gap-3 p-4 rounded-lg border ${
-        isApproved 
-          ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900" 
-          : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900"
+        isApproved
+          ? "bg-primary/5 border-primary/25"
+          : "bg-accent/10 border-accent/30"
       }`}>
         {isApproved ? (
-          <IconCircleCheck className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+          <IconCircleCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
         ) : (
-          <IconAlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+          <IconAlertTriangle className="h-5 w-5 text-accent mt-0.5 flex-shrink-0" />
         )}
         <div className="flex-1">
           <h4 className={`text-sm font-semibold mb-1 ${
-            isApproved ? "text-green-900 dark:text-green-100" : "text-amber-900 dark:text-amber-100"
+            isApproved ? "text-primary" : "text-accent-foreground"
           }`}>
-            {isApproved ? "✓ Calculations Approved" : "⚠ Revisions Needed"}
+            {isApproved ? "Calculations Approved" : "Revisions Needed"}
           </h4>
-          <p className={`text-sm ${
-            isApproved ? "text-green-700 dark:text-green-300" : "text-amber-700 dark:text-amber-300"
-          }`}>
+          <p className="text-sm text-foreground/75 leading-relaxed">
             {data.summary}
           </p>
         </div>

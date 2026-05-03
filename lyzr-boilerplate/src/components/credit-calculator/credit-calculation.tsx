@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { IconLoader2, IconCloud, IconShieldLock, IconInfoCircle, IconCalculator, IconBrain } from "@tabler/icons-react";
+import { IconLoader2, IconCloud, IconShieldLock, IconInfoCircle, IconCalculator, IconBrain, IconFilter, IconLayersIntersect } from "@tabler/icons-react";
 import { CreditCalculation as CreditCalculationType } from "@/lib/types";
 
 interface CreditCalculationProps {
@@ -126,34 +126,172 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
           </div>
         </div>
 
+        {/* Volume decomposition (funnel + onboarding + continuous ops + outer buffer) */}
+        {!hasMultipleRows && (data.funnel_multiplier || data.steady_state_annual_runs) && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <IconFilter className="h-4 w-4 text-primary" />
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-primary">
+                Volume Decomposition
+              </h4>
+            </div>
+            {data.use_case_category && (
+              <p className="text-xs text-foreground/70">
+                <span className="font-semibold">Category:</span> {data.use_case_category}
+              </p>
+            )}
+            {data.funnel_multiplier && data.effective_unit_volume && (
+              <div className="text-xs text-foreground/80 space-y-0.5">
+                <p>
+                  <span className="font-medium">Stated volume:</span> {formatNumber(data.unit_volume)} units/yr
+                  <span className="mx-2 text-muted-foreground">×</span>
+                  <span className="font-medium">funnel {data.funnel_multiplier.toFixed(2)}×</span>
+                  <span className="mx-2 text-muted-foreground">=</span>
+                  <span className="font-semibold text-primary">
+                    {formatNumber(data.effective_unit_volume)} effective units processed
+                  </span>
+                </p>
+                {data.funnel_rationale && (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    Funnel: {data.funnel_rationale}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Waterfall */}
+            <div className="overflow-hidden rounded border bg-input-bg/60 mt-1">
+              <table className="w-full text-xs">
+                <tbody className="divide-y">
+                  {data.steady_state_annual_runs !== undefined && (
+                    <tr>
+                      <td className="py-1.5 px-2.5 text-foreground/80">Steady-state runs (effective volume × effective runs/unit)</td>
+                      <td className="py-1.5 px-2.5 font-mono text-right">{formatNumber(data.steady_state_annual_runs)}</td>
+                    </tr>
+                  )}
+                  {data.continuous_ops_runs !== undefined && (data.continuous_ops_runs > 0 || (data.continuous_ops_pct ?? 0) > 0) && (
+                    <tr>
+                      <td className="py-1.5 px-2.5 text-foreground/80">
+                        + Continuous ops ({data.continuous_ops_pct}%) — copilot, KB curation, monitoring
+                      </td>
+                      <td className="py-1.5 px-2.5 font-mono text-right">+{formatNumber(data.continuous_ops_runs)}</td>
+                    </tr>
+                  )}
+                  {data.onboarding_runs !== undefined && (data.onboarding_runs > 0 || (data.onboarding_pct ?? 0) > 0) && (
+                    <tr>
+                      <td className="py-1.5 px-2.5 text-foreground/80">
+                        + Year-1 onboarding ({data.onboarding_pct}%) — calibration, UAT, ingestion
+                      </td>
+                      <td className="py-1.5 px-2.5 font-mono text-right">+{formatNumber(data.onboarding_runs)}</td>
+                    </tr>
+                  )}
+                  {data.edge_buffer_runs !== undefined && data.edge_buffer_runs > 0 && (
+                    <tr>
+                      <td className="py-1.5 px-2.5 text-foreground/80">
+                        + Edge-case buffer ({data.iteration_buffer_pct}%) — surge, outages, novel inputs
+                      </td>
+                      <td className="py-1.5 px-2.5 font-mono text-right">+{formatNumber(data.edge_buffer_runs)}</td>
+                    </tr>
+                  )}
+                  <tr className="bg-primary/10 border-t-2 border-primary/30">
+                    <td className="py-1.5 px-2.5 font-semibold text-primary">= Total annual runs</td>
+                    <td className="py-1.5 px-2.5 font-mono text-right font-bold text-primary">
+                      {formatNumber(data.total_annual_runs)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {data.volume_breakdown_note && (
+              <p className="text-[11px] text-muted-foreground italic mt-1">{data.volume_breakdown_note}</p>
+            )}
+          </div>
+        )}
+
         {/* Agent runs breakdown per unit */}
         {data.runs_breakdown && data.runs_breakdown.length > 0 && !hasMultipleRows && (
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground/70 mb-2">
-              Agent runs per unit ({data.runs_per_unit} {data.runs_per_unit === 1 ? "run" : "runs"})
+              Agent runs per unit
+              {data.effective_runs_per_unit !== undefined && data.base_runs_per_unit !== undefined ? (
+                <span className="ml-1 font-normal text-muted-foreground normal-case tracking-normal">
+                  ({data.base_runs_per_unit} base × iteration → {data.effective_runs_per_unit.toFixed(2)} effective)
+                </span>
+              ) : (
+                <span className="ml-1 font-normal text-muted-foreground normal-case tracking-normal">
+                  ({data.runs_per_unit} {data.runs_per_unit === 1 ? "run" : "runs"})
+                </span>
+              )}
             </h4>
             <div className="overflow-hidden rounded-lg border">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50">
                     <th className="py-2 px-3 text-left font-semibold">Reasoning Step</th>
-                    <th className="py-2 px-3 text-left font-semibold">Runs</th>
+                    <th className="py-2 px-3 text-left font-semibold">Phase</th>
+                    <th className="py-2 px-3 text-right font-semibold">Base runs</th>
+                    <th className="py-2 px-3 text-right font-semibold">Iter ×</th>
+                    <th className="py-2 px-3 text-right font-semibold">Effective</th>
                     <th className="py-2 px-3 text-left font-semibold">Why</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {data.runs_breakdown.map((step, i) => (
+                  {data.runs_breakdown.map((step, i) => {
+                    const iter = step.iteration_multiplier ?? 1;
+                    const eff = step.effective_runs ?? step.runs * iter;
+                    return (
+                      <tr key={i}>
+                        <td className="py-2 px-3 font-medium">{step.step_name}</td>
+                        <td className="py-2 px-3 text-foreground/70 text-xs capitalize">{step.phase ?? "—"}</td>
+                        <td className="py-2 px-3 font-mono text-right">{step.runs}</td>
+                        <td className="py-2 px-3 font-mono text-right">{iter.toFixed(2)}×</td>
+                        <td className="py-2 px-3 font-mono text-right font-semibold">{eff.toFixed(2)}</td>
+                        <td className="py-2 px-3 text-foreground/70 text-xs">{step.reasoning}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5 italic">
+              Iteration multipliers capture per-step rework. Continuous-ops, onboarding, and edge-case buffers are applied above in the Volume Decomposition.
+            </p>
+          </div>
+        )}
+
+        {/* Phase breakdown */}
+        {data.phase_breakdown && data.phase_breakdown.length > 0 && !hasMultipleRows && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <IconLayersIntersect className="h-4 w-4 text-foreground/70" />
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
+                Phase Breakdown
+              </h4>
+            </div>
+            <div className="overflow-hidden rounded-lg border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50">
+                    <th className="py-2 px-3 text-left font-semibold">Phase</th>
+                    <th className="py-2 px-3 text-right font-semibold">Annual runs</th>
+                    <th className="py-2 px-3 text-right font-semibold">% of total</th>
+                    <th className="py-2 px-3 text-left font-semibold">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.phase_breakdown.map((p, i) => (
                     <tr key={i}>
-                      <td className="py-2 px-3 font-medium">{step.step_name}</td>
-                      <td className="py-2 px-3 font-mono">{step.runs}</td>
-                      <td className="py-2 px-3 text-foreground/70 text-xs">{step.reasoning}</td>
+                      <td className="py-2 px-3 font-medium capitalize">{p.phase}</td>
+                      <td className="py-2 px-3 font-mono text-right">{formatNumber(p.runs)}</td>
+                      <td className="py-2 px-3 font-mono text-right">{p.pct_of_total.toFixed(1)}%</td>
+                      <td className="py-2 px-3 text-foreground/70 text-xs">{p.note ?? ""}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <p className="text-xs text-muted-foreground mt-1.5 italic">
-              Includes a {data.iteration_buffer_pct}% iteration buffer for re-runs, revisions, and edge cases.
+              Useful for modular adoption — start with one or two phases and expand.
             </p>
           </div>
         )}

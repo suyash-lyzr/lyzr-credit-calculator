@@ -17,6 +17,11 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Lyzr AI Apps",
   description: "Lyzr Credit Calculator",
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png" }],
+    shortcut: ["/favicon.png"],
+    apple: [{ url: "/favicon.png" }],
+  },
 };
 
 export default function RootLayout({
