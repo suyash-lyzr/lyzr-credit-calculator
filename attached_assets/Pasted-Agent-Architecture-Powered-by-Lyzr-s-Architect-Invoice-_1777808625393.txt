@@ -1,0 +1,107 @@
+Agent Architecture
+Powered by Lyzr's Architect
+Invoice Processing with Approval Workflow: Multi-agent orchestrator that ingests invoices, extracts structured fields, validates against POs and policy, routes for approval based on thresholds, and posts to ERP. Includes exception handling and a finance copilot for queries.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Drag to pan • Scroll to zoom
+Credit Calculation
+Lyzr charges only for agent runs. Knowledge base lookups, tool calls, sub-agent calls, memory, guardrails, and security policies are all free inside an agent run. LLM costs are passed through separately at provider rates.
+
+Architecture: Orchestrator with 5 specialist agents (Extraction, Validation, Approval Routing, ERP Posting) plus Finance Copilot. Each invoice flows through ~5 reasoning steps with iteration overhead for exceptions.
+
+1. Agent Run Calculation
+Lyzr VPC / On-Prem
+
+$0.03 per agent run — customer environment, full data sovereignty
+
+Workloads
+Workload	Volume	Runs/Unit	Annual Runs	Lyzr	LLM	Total
+One-time Backlog (10,000 invoices)	10,000	13.33	133,310	$3,999	$461.27	$4,461
+Ongoing (60,000 invoices/yr)	60,000	13.33	799,864	$23,996	$2,768	$26,764
+Backlog of 10,000 invoices processed once + ongoing 5,000/month (60,000/yr) on Lyzr VPC at $0.03/run. LLM is pass-through at provider rates with no markup.
+
+Lyzr Agent Run Cost (Annual)
+
+Software cost
+$27,995
+
+Across all workloads at $0.03/run
+
+2. LLM Estimation (Pass-through)
+Per-step model selection, token estimates, and cost. Billed directly by OpenAI / Anthropic / Google — Lyzr takes no markup.
+
+Step / Action	Model	In tok	Out tok	Rate $/1M (in/out)	Cost / call	Calls / unit	Annual calls	Annual cost
+Triage & Intake
+Classify invoice source/format and route to extractor.
+GPT-5.4 Nano
+OpenAI
+Lightweight classification — Nano is more than enough at lowest cost.
+600	150	$0.20 / $1.25	$0.000307	1.1	188,866	$58.08
+Extract Fields
+Extract header, line items, tax, vendor, and PO references into structured JSON.
+Claude Haiku 4.5
+Anthropic
+Strong instruction following and structured extraction at mid-tier price.
+4,000	800	$1.00 / $5.00	$0.008000	1.25	214,620	$1,717
+Validate Against PO & Policy
+3-way match invoice vs PO/GR and check against policy KB; flag exceptions.
+Gemini 3 Flash
+Google
+Cheap RAG-style validation with KB context; 1M ctx handles policy snippets easily.
+3,000	600	$0.50 / $3.00	$0.003300	1.4	240,374	$793.23
+Approval Routing
+Apply approval thresholds, pick approver, draft notification, handle re-routes.
+o4-mini
+OpenAI
+Threshold/rule reasoning with exception handling — budget reasoning model fits well.
+2,000	400	$0.55 / $2.20	$0.001980	1.5	257,544	$509.94
+ERP Posting & Confirm
+Construct journal entry payload, call ERP API, reconcile response, retry on failure.
+GPT-5.4 Nano
+OpenAI
+Deterministic API payload assembly; Nano is sufficient and cheapest.
+1,500	300	$0.20 / $1.25	$0.000675	1.3	223,204	$150.66
+Total LLM cost	$0.0189 / unit	$3,229
+Includes a 20% LLM buffer for retries, self-correction loops, multi-sample generation, and tool-use iterations within an agent run.
+
+LLM Pass-through Cost (Annual)
+
+Provider rates
+$3,229
+
+Billed directly by OpenAI / Anthropic / Google. No Lyzr markup.
+
+Total Annual Cost
+
+$31,224
+
+Lyzr agent runs ($27,995) + LLM pass-through ($3,229).
+
+ROI Analysis
+ROI Analysis: AI vs. Human Execution Comparison based on a standard AP Clerk rate of $33/hr taking 18 minutes per invoice.
+
+Metric	Human Manual Process	Lyzr Agent Architecture
+Time Per invoice	18 Minutes	< 1 Minute (Parallel)
+Unit Cost	$9.75 / invoice	$0.45 / invoice (Lyzr runs + LLM)
+Total Year 1 Cost	$682k	$31k
+Net Savings	–	$651k (95.4%)
+The Bottom Line: For a total investment of ~$31k (Lyzr agent runs + LLM pass-through), you replace $682k in manual labor, ensuring instant scalability and 24/7 execution across your invoice processing with approval workflow workflow.
+
+Review & Validation
+Calculations Approved
+Architecture, agent run counting, LLM model mix, and ROI all reconcile. 5-step orchestrator pattern with mixed-model LLM strategy (Nano for routing/posting, Haiku for extraction, Gemini Flash for validation, o4-mini for routing logic) appropriate for high-throughput AP. Volume waterfall (1.4x funnel + 12% edge buffer + 18% Y1 onboarding + 10% continuous ops) is defensible. Total annual cost $31,224 vs human cost $682,500 yields 95.4% savings — within expected band for document processing automation.

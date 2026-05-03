@@ -110,35 +110,46 @@ One agent run = one billable unit, regardless of how much work happens inside it
 
 === HOW TO COUNT AGENT RUNS PER USE CASE ===
 
-CRITICAL MENTAL MODEL: The number a user gives you (e.g. "200 contracts/month") is almost always
-the SUCCESSFUL FINAL OUTPUT at the bottom of a funnel. The real workload is much larger because:
-  (a) FUNNEL — to ship 200 successful outputs the system processes more candidates upstream
+CRITICAL MENTAL MODEL: The number a user gives you (e.g. "200 contracts/month" or "60,000
+invoices/year") is almost always the SUCCESSFUL FINAL OUTPUT at the bottom of a funnel.
+The real workload is bigger because:
+  (a) FUNNEL — to ship N successful outputs the system processes more candidates upstream
       (rejections, reroutes, escalations, classification dead-ends).
-  (b) ITERATION — each step rarely passes first time; revision loops, re-checks, exception
-      handling, human-in-the-loop back-and-forth all multiply runs per stage.
-  (c) ONBOARDING (Year 1) — calibration, skill validation, past-data ingestion, UAT, test runs.
-  (d) CONTINUOUS OPS — copilot conversations, KB updates, monitoring, performance tuning,
-      cross-workflow intelligence (each copilot turn = 1 run).
+  (b) PER-STEP REWORK — each step rarely passes first time. Real workflows have compliance
+      checks, review loops, exception handling, and human-in-the-loop back-and-forth that
+      multiply runs at specific stages. THIS IS WHERE THE TO-AND-FRO LIVES — bake it into
+      the per-step iteration_multiplier, not into a separate aggregate adder.
+  (c) OPERATIONAL BUFFER — one outer safety margin for surge volume, edge cases, copilot
+      questions, and model retries. Keep this as a SINGLE clear number — do not fragment it.
 
-Treating use cases as flat deterministic pipelines under-counts runs by 3-10x. Customers' own
-ops teams will know their reject rates and iteration overhead — your number must be defensible.
+Treating use cases as flat deterministic pipelines under-counts runs by 3-10x. Be defensible.
 
-Step 1: Map the workflow into discrete reasoning steps. Tag each step with a phase
-        (discovery / validation / processing / review / delivery / monitoring).
+Step 1: Map the workflow into discrete reasoning steps INCLUDING compliance/review/approval
+        gates that the user might omit. For invoice processing you typically have:
+        intake → extract → policy/PO check → compliance/duplicate check → approval routing →
+        post → confirm. Don't skip the validation/review steps.
+        Tag each step with a phase (discovery / validation / processing / review / delivery / monitoring).
 
 Step 2: For each step set:
-  - runs (base runs per unit at first attempt)
-  - iteration_multiplier (1.0 = no rework, 1.2 = 20% redo, 2.0 = ~2 attempts avg, 3.0+ = heavy back-and-forth)
-  - reasoning (1 sentence justifying both numbers)
+  - runs (base reasoning calls per unit on first pass through this step)
+  - iteration_multiplier (captures THE TO-AND-FRO at this stage)
+       1.0  = always passes first time (rare)
+       1.2  = 20% redo on average
+       1.5  = ~50% need rework / second look
+       2.0  = avg ~2 passes (review loops, compliance objection-and-fix)
+       2.5+ = heavy back-and-forth (multiple rounds of approval, regulated workflows)
+  - reasoning (1 sentence justifying both — name the rework reason: "compliance flag rate ~30%
+    triggers re-extract + re-validate" / "approver kicks back ~40% for missing PO link")
   - effective_runs = runs × iteration_multiplier
-  Defaults by step type:
-     classification / routing      → iteration 1.05-1.15
-     extraction / parsing          → iteration 1.1-1.3
-     judgment / review / scoring   → iteration 1.3-1.6
-     drafting / generation         → iteration 1.5-2.5
-     validation against rules      → iteration 1.2-1.5
-     orchestration / planning      → iteration 1.2-1.4
-     critic / approval gate        → iteration 1.3-2.0
+
+  Default iteration_multiplier by step type — pick the HIGHER end for regulated workflows:
+     classification / routing      → 1.05 - 1.20
+     extraction / parsing          → 1.10 - 1.40   (higher when source quality is low)
+     validation against rules      → 1.30 - 1.80   (compliance / 3-way match: high)
+     judgment / review / scoring   → 1.40 - 1.80
+     drafting / generation         → 1.50 - 2.50
+     orchestration / planning      → 1.20 - 1.50
+     critic / approval gate        → 1.50 - 2.50   (kickback rates 30-50% are normal)
 
 Step 3: Apply the FUNNEL multiplier to volume.
   funnel_multiplier ≥ 1, applied to user-stated unit_volume.
@@ -150,43 +161,37 @@ Step 4: STEADY-STATE math.
   effective_runs_per_unit  = sum(step.runs × step.iteration_multiplier)
   steady_state_annual_runs = effective_unit_volume × effective_runs_per_unit
 
-Step 5: CONTINUOUS OPS adder.
-  continuous_ops_pct (5-25%) — copilot turns, KB curation, monitoring, cross-workflow chats.
-  continuous_ops_runs = steady_state_annual_runs × continuous_ops_pct/100
+Step 5: ONE OPERATIONAL BUFFER (do not split into multiple categories).
+  iteration_buffer_pct (typical 20-40%) — single outer margin covering everything not in the
+  per-step iteration: surge volume, copilot questions on top of the core workflow, model
+  retries/timeouts, novel inputs, ramp-up calibration in early months. Pick ONE number and
+  state plainly what it covers in volume_breakdown_note.
 
-Step 6: YEAR-1 ONBOARDING adder.
-  onboarding_pct (15-30% in year 1, 0 once steady state) — skill validation, past-data ingestion,
-  brand/domain calibration, UAT cycles, test campaigns.
-  onboarding_runs = (steady_state_annual_runs + continuous_ops_runs) × onboarding_pct/100
+  total_annual_runs = steady_state_annual_runs × (1 + iteration_buffer_pct/100)
 
-Step 7: OUTER edge-case buffer.
-  iteration_buffer_pct (10-20%) — outer safety margin for true edge cases NOT captured by
-  per-step iteration_multiplier (model outages, surge volume, novel inputs).
-  edge_buffer_runs = (steady_state + continuous_ops + onboarding) × iteration_buffer_pct/100
+  DO NOT emit separate continuous_ops_runs / onboarding_runs / edge_buffer_runs lines.
+  Those are confusing for procurement. The single buffer above is the only adder.
 
-Step 8: TOTAL.
-  total_annual_runs = steady_state_annual_runs + continuous_ops_runs + onboarding_runs + edge_buffer_runs
-
-Step 9: PHASE BREAKDOWN.
-  Group runs_breakdown by phase and emit phase_breakdown[] with runs, pct_of_total, and a short note.
-  This makes the number procurement-defensible and enables modular adoption ("start with phases 2-3").
+Step 6: PHASE BREAKDOWN.
+  Group runs_breakdown by phase and emit phase_breakdown[] with runs, pct_of_total, and a short
+  note. This makes the number procurement-defensible and enables modular adoption.
 
 === DEFAULTS LIBRARY BY USE CASE CATEGORY ===
 
 Pick the closest match, set use_case_category, and use these as starting points (adjust per
 specifics). These are based on real enterprise deployments — do NOT default to lower numbers.
 
-| Category                                                   | funnel_mult | per-step iter | continuous_ops | onboarding (Y1) |
-|------------------------------------------------------------|-------------|---------------|----------------|-----------------|
-| Document processing — high-throughput, structured          | 1.3 - 1.8   | 1.1 - 1.3     | 5 - 10%        | 15 - 20%        |
-| Document processing — judgment-heavy, regulated            | 1.5 - 2.5   | 1.5 - 2.0     | 10 - 15%       | 20 - 25%        |
-| Marketing campaigns — test-and-learn / creative            | 5.0 - 10.0  | 2.0 - 3.0     | 15 - 25%       | 20 - 30%        |
-| Customer service triage / support                          | 1.1 - 1.3   | 1.1 - 1.2     | 20 - 30%       | 10 - 15%        |
-| Decision workflows (CFO close, KYC, underwriting)          | 1.8 - 2.5   | 1.5 - 2.0     | 10 - 20%       | 20 - 30%        |
-| Real-time decisioning (next-best-action, fraud)            | 1.0 - 1.1   | 1.0 - 1.1     | 5 - 10%        | 10 - 15%        |
-| Research / analyst workflows (multi-source synthesis)      | 2.0 - 4.0   | 1.5 - 2.5     | 15 - 25%       | 20 - 30%        |
-| Code / engineering automation (review, refactor, tests)    | 1.5 - 3.0   | 2.0 - 3.0     | 15 - 25%       | 20 - 25%        |
-| Sales workflows (lead qual, outreach, enrichment)          | 2.0 - 5.0   | 1.3 - 1.8     | 15 - 25%       | 15 - 20%        |
+| Category                                                   | funnel_mult | per-step iter (avg) | operational buffer |
+|------------------------------------------------------------|-------------|---------------------|--------------------|
+| Document processing — high-throughput, structured          | 1.3 - 1.8   | 1.2 - 1.4           | 20 - 30%           |
+| Document processing — judgment-heavy, regulated            | 1.5 - 2.5   | 1.6 - 2.2           | 25 - 35%           |
+| Marketing campaigns — test-and-learn / creative            | 5.0 - 10.0  | 2.0 - 3.0           | 30 - 40%           |
+| Customer service triage / support                          | 1.1 - 1.3   | 1.1 - 1.3           | 25 - 35%           |
+| Decision workflows (CFO close, KYC, underwriting)          | 1.8 - 2.5   | 1.6 - 2.2           | 25 - 35%           |
+| Real-time decisioning (next-best-action, fraud)            | 1.0 - 1.1   | 1.0 - 1.2           | 15 - 25%           |
+| Research / analyst workflows (multi-source synthesis)      | 2.0 - 4.0   | 1.5 - 2.5           | 30 - 40%           |
+| Code / engineering automation (review, refactor, tests)    | 1.5 - 3.0   | 2.0 - 3.0           | 25 - 35%           |
+| Sales workflows (lead qual, outreach, enrichment)          | 2.0 - 5.0   | 1.3 - 1.8           | 25 - 35%           |
 
 If the user only gave one volume number, ASSUME it is the successful-output bottom-of-funnel and
 apply the category default. If they explicitly said "we receive X documents and process Y", set
@@ -275,10 +280,11 @@ and split runs_per_unit between them so they sum to the step's effective_runs.)
 
 Compute the OVERHEAD FACTOR once and reuse it for every row:
 
-    overhead_factor = total_annual_runs / steady_state_annual_runs
+    overhead_factor = 1 + iteration_buffer_pct / 100
+                    = total_annual_runs / steady_state_annual_runs
 
-(This factor folds in continuous-ops, onboarding, and the outer edge-case buffer. It is typically
-in the range 1.15–1.65. If you compute < 1.0 you've made an error.)
+(This is the SAME single buffer from the agent-run waterfall — typically 1.20–1.40.
+If you compute < 1.0 you've made an error.)
 
 For each LLM step row:
   • step_name           → MUST exactly match the step_name in runs_breakdown
@@ -397,20 +403,15 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
         },
 
         steady_state_annual_runs: { type: "number", description: "= effective_unit_volume × effective_runs_per_unit" },
-        continuous_ops_pct: { type: "number", description: "5-25%. Copilot turns, KB curation, monitoring, cross-workflow chats." },
-        continuous_ops_runs: { type: "number", description: "= steady_state_annual_runs × continuous_ops_pct/100" },
-        onboarding_pct: { type: "number", description: "15-30% in Year 1 (skill validation, past-data ingestion, calibration, UAT). 0 if customer says steady-state only." },
-        onboarding_runs: { type: "number", description: "= (steady_state_annual_runs + continuous_ops_runs) × onboarding_pct/100" },
 
         iteration_buffer_pct: {
           type: "number",
-          description: "OUTER edge-case buffer (10-20% typical). For surge volume, model outages, novel inputs NOT captured by per-step iteration_multiplier.",
+          description: "SINGLE operational buffer (typical 20-40%). One number covering surge volume, copilot questions, model retries, novel inputs, and ramp-up calibration. DO NOT split this into multiple categories.",
         },
-        edge_buffer_runs: { type: "number", description: "= (steady_state + continuous_ops + onboarding) × iteration_buffer_pct/100" },
 
         total_annual_runs: {
           type: "number",
-          description: "= steady_state_annual_runs + continuous_ops_runs + onboarding_runs + edge_buffer_runs",
+          description: "= steady_state_annual_runs × (1 + iteration_buffer_pct/100). One single buffer applied — no separate continuous-ops/onboarding/edge lines.",
         },
 
         phase_breakdown: {
@@ -465,7 +466,7 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
         },
         llm_buffer_pct: {
           type: "number",
-          description: "Separate iteration buffer for LLM calls (30-50% typical). Accounts for retries, self-correction loops, multiple samples per agent run, and tool-use iterations within a single agent run.",
+          description: "Small within-run LLM buffer (15-25% typical). Accounts for retries, self-correction loops, and multi-sample generation INSIDE a single agent run. Keep low — the to-and-fro between steps is already in iteration_multiplier and the operational buffer.",
         },
         llm_per_unit_cost: { type: "number", description: "Sum of cost_per_unit across all llm_steps (LLM cost to process ONE business unit)" },
         llm_breakdown: {
@@ -529,9 +530,7 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
         "base_runs_per_unit", "effective_runs_per_unit",
         "runs_per_unit", "runs_breakdown",
         "steady_state_annual_runs",
-        "continuous_ops_pct", "continuous_ops_runs",
-        "onboarding_pct", "onboarding_runs",
-        "iteration_buffer_pct", "edge_buffer_runs",
+        "iteration_buffer_pct",
         "total_annual_runs",
         "phase_breakdown",
         "lyzr_annual_cost",

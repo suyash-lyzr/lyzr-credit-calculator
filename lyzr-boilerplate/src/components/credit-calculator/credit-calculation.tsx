@@ -159,38 +159,26 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
               </div>
             )}
 
-            {/* Waterfall */}
+            {/* Waterfall — simple two-line: steady-state + single buffer */}
             <div className="overflow-hidden rounded border bg-input-bg/60 mt-1">
               <table className="w-full text-xs">
                 <tbody className="divide-y">
                   {data.steady_state_annual_runs !== undefined && (
                     <tr>
-                      <td className="py-1.5 px-2.5 text-foreground/80">Steady-state runs (effective volume × effective runs/unit)</td>
+                      <td className="py-1.5 px-2.5 text-foreground/80">
+                        Steady-state runs (effective volume × effective runs/unit, includes per-step rework)
+                      </td>
                       <td className="py-1.5 px-2.5 font-mono text-right">{formatNumber(data.steady_state_annual_runs)}</td>
                     </tr>
                   )}
-                  {data.continuous_ops_runs !== undefined && (data.continuous_ops_runs > 0 || (data.continuous_ops_pct ?? 0) > 0) && (
+                  {data.iteration_buffer_pct !== undefined && data.steady_state_annual_runs !== undefined && (
                     <tr>
                       <td className="py-1.5 px-2.5 text-foreground/80">
-                        + Continuous ops ({data.continuous_ops_pct}%) — copilot, KB curation, monitoring
+                        + Operational buffer ({data.iteration_buffer_pct}%) — surge, copilot questions, retries, ramp-up
                       </td>
-                      <td className="py-1.5 px-2.5 font-mono text-right">+{formatNumber(data.continuous_ops_runs)}</td>
-                    </tr>
-                  )}
-                  {data.onboarding_runs !== undefined && (data.onboarding_runs > 0 || (data.onboarding_pct ?? 0) > 0) && (
-                    <tr>
-                      <td className="py-1.5 px-2.5 text-foreground/80">
-                        + Year-1 onboarding ({data.onboarding_pct}%) — calibration, UAT, ingestion
+                      <td className="py-1.5 px-2.5 font-mono text-right">
+                        +{formatNumber(Math.round(data.steady_state_annual_runs * data.iteration_buffer_pct / 100))}
                       </td>
-                      <td className="py-1.5 px-2.5 font-mono text-right">+{formatNumber(data.onboarding_runs)}</td>
-                    </tr>
-                  )}
-                  {data.edge_buffer_runs !== undefined && data.edge_buffer_runs > 0 && (
-                    <tr>
-                      <td className="py-1.5 px-2.5 text-foreground/80">
-                        + Edge-case buffer ({data.iteration_buffer_pct}%) — surge, outages, novel inputs
-                      </td>
-                      <td className="py-1.5 px-2.5 font-mono text-right">+{formatNumber(data.edge_buffer_runs)}</td>
                     </tr>
                   )}
                   <tr className="bg-primary/10 border-t-2 border-primary/30">
