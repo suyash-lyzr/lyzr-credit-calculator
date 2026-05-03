@@ -47,7 +47,7 @@ export default function DesignGuidelines() {
       <div className="border-b bg-card">
         <div className="container mx-auto px-6 py-8">
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-r from-[#603BFC] to-[#A94FA1] rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center">
               <PaletteIcon className="w-6 h-6 text-white" />
             </div>
             <div>
