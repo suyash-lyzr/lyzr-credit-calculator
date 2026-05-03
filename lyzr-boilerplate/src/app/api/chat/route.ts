@@ -197,7 +197,7 @@ Step 5: ONE OPERATIONAL BUFFER (single number, but procurement-defensible).
   DO NOT emit separate top-level continuous_ops_runs / onboarding_runs / edge_buffer_runs
   fields in the credit calculation — the single buffer above is the only adder at that level.
   (Year-1 onboarding for regulated rollouts is handled separately as its own WORKLOAD ROW
-  in `rows[]` per Step 5b — that's a different thing from a buffer line.)
+  in 'rows[]' per Step 5b — that's a different thing from a buffer line.)
 
 Step 5b: YEAR-1 ONBOARDING (regulated / enterprise rollouts only).
   For any regulated workflow (legal, financial, healthcare, compliance) at enterprise scale,
@@ -210,7 +210,7 @@ Step 5b: YEAR-1 ONBOARDING (regulated / enterprise rollouts only).
     • UAT cycles with the business team (30K-50K runs)
   Total typically 100K-200K one-time runs.
 
-  Surface this as an EXTRA workload row in `rows[]` named "Year-1 Onboarding & Calibration
+  Surface this as an EXTRA workload row in 'rows[]' named "Year-1 Onboarding & Calibration
   (one-time)" alongside backlog and ongoing. Do NOT bury it in the buffer for regulated
   enterprise deals — procurement will demand to see it explicitly. For non-regulated or SMB
   deals you may skip it.
@@ -241,7 +241,7 @@ and for regulated categories do not go below the lower bound without an explicit
 
 For any category labelled "regulated" the operational buffer is 40-60% with 50% as the
 procurement-defensible anchor — go to 60-80% only if Year-1 onboarding is bundled into the
-ongoing line rather than emitted as a separate row in `rows[]`.
+ongoing line rather than emitted as a separate row in 'rows[]'.
 
 If the user only gave one volume number, ASSUME it is the successful-output bottom-of-funnel
 AND likely scoped to one team / type / geography. Apply the category default funnel and EXPLAIN
@@ -392,7 +392,7 @@ For COMBINED: use the "rows" array to show BOTH workloads as separate rows.
 
 total_annual_runs = steady_state_annual_runs × (1 + iteration_buffer_pct/100)
 (see Steps 1-6 above for the full waterfall — funnel × per-step iteration × single outer buffer.)
-For regulated enterprise rollouts, Year-1 onboarding goes in its own `rows[]` row, NOT as a
+For regulated enterprise rollouts, Year-1 onboarding goes in its own 'rows[]' row, NOT as a
 separate top-level field.
 
 === CALCULATION ===
