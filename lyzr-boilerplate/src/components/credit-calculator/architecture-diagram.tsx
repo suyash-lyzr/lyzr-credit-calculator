@@ -119,12 +119,12 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
       startOnLoad: false,
       theme: "base",
       themeVariables: {
-        primaryColor: "#603BFC",
-        primaryTextColor: "#fff",
-        primaryBorderColor: "#A94FA1",
-        lineColor: "#A94FA1",
-        secondaryColor: "#f0f0f0",
-        tertiaryColor: "#fff",
+        primaryColor: "#673F1B",
+        primaryTextColor: "#FAF6EE",
+        primaryBorderColor: "#3D2510",
+        lineColor: "#3D2510",
+        secondaryColor: "#F5EFE3",
+        tertiaryColor: "#FFFFFF",
         fontSize: "12px",
       },
       flowchart: {
