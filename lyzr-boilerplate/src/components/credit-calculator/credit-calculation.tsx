@@ -82,9 +82,7 @@ export function CreditCalculation({ data, isLoading }: CreditCalculationProps) {
       {/* Intro */}
       <p className="text-sm text-foreground/80">
         <span className="font-semibold">Lyzr charges only for agent runs.</span>{" "}
-        Knowledge base lookups, tool calls, sub-agent calls, memory, guardrails, and security policies
-        are all <span className="font-medium">free inside an agent run</span>. LLM costs are passed
-        through separately at provider rates.
+        LLM costs are passed through separately at provider rates &mdash; no markup.
       </p>
 
       {/* Architecture summary */}

@@ -1,0 +1,32 @@
+. The funnel multiplier is way too smallThe calculator uses 1.6× funnel (4,600 contracts → 7,360 funnel volume → 115K runs). For a regulated legal workflow at enterprise scale, the real funnel is much wider:
+Contracts received but rejected at intake (wrong type, missing pages, scanned poorly): 20-30%
+Contracts that need clarification rounds with the originating team: 30-40%
+Contracts that go through multiple iteration rounds with counsel: 25-35%
+Contracts that get re-classified after first pass: 10-15%
+Test/validation runs during ramp-up: not counted at all
+Exception handling (unusual contract structures): 5-10%
+A realistic enterprise legal funnel is 2.5-4×, not 1.6×.2. Iteration depth per step is undercountedLook at the LLM table — most steps have "Calls/unit" between 1.0 and 3.0. For a regulated legal workflow:
+Extraction runs 1-3 times (yes), but also gets re-extracted when validation fails, when counsel disputes terms, when amendments need re-processing. Real average is 4-6 calls.
+Risk validation at 1.8 is way too low. Each clause that fails playbook gets re-evaluated, escalated, sometimes routed to a human, then re-checked. Real average is 3-5.
+Summary drafting at 2.0 is fine for first pass but doesn't include redline iterations with counsel. Real average is 4-7.
+Approval gate at 1.7 — final reviews in regulated contexts go through 2-3 reviewers, each with their own concern → fix → re-check loop. Real average is 5-8.
+3. Continuous platform work isn't modelledThe calculator has zero allowance for:
+
+Copilot conversations (every paralegal/counsel turn = 1 run, easily 50-200 turns/day across the team)
+Knowledge base updates (new playbook rules, new clause patterns, regulatory changes)
+Cross-contract intelligence (pattern extraction across the portfolio for negotiation leverage)
+Skill tuning (continuous improvement of extraction accuracy, classifier precision)
+Audit trail and compliance reporting (regulated workflows require this constantly)
+This alone is typically 15-25% of total runs at enterprise scale.4. Year 1 onboarding isn't modelledFor a regulated legal workflow, Year 1 includes:
+
+Playbook ingestion and rule encoding (~5K-10K runs)
+Past contract corpus indexing (3+ years of contracts = 50K-100K runs)
+Clause library training (~20K-30K runs)
+Counsel-specific tone calibration (~10K-15K runs)
+UAT cycles with the legal team (~30K-50K runs)
+That's 100K-200K one-time runs not captured anywhere.5. The base assumption is wrongThe calculator assumes the customer told us their full volume. But "50 contracts/week" is almost certainly:
+
+Just one contract type (NDAs only, or MSAs only)
+Just one team or geography
+Just the ones that reach a specific stage
+Real enterprise legal volume across all contract types, all teams, all stages is typically 3-10× what gets stated initially. The calculator should challenge this number, not accept it.6. The buffer is too thin30% buffer is fine for a stable steady-state workflow. For enterprise procurement to find this defensible, 50% is the right anchor — and the calculator should explain what the buffer covers (re-runs, copilot, edge cases, exception handling) instead of treating it as a magic number.What the recalculation looks like with these fixesSame use case, honest numbers:AdjustmentFromToImpactFunnel multiplier1.6×3×+1.9× runsAvg calls per unit12.0522+1.8× runsContinuous platform work0+20%+1.2× runsYear 1 onboarding0+150K runs+1.3× runsBuffer30%50%+1.15× runsResult: ~115K runs becomes ~900K-1.1M runs. At $0.03 = $27K-$33K
