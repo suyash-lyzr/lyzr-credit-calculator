@@ -25,6 +25,7 @@
   --destructive-foreground: hsl(36, 33%, 94%);
   --border: hsl(30, 15%, 85%);
   --input: hsl(30, 15%, 85%);
+  --input-bg: hsl(36, 50%, 99%);
   --ring: hsl(25, 62%, 25%);
 
   --chart-1: hsl(25, 62%, 25%);
@@ -84,6 +85,7 @@
   --destructive-foreground: hsl(36, 33%, 94%);
   --border: hsl(25, 15%, 22%);
   --input: hsl(25, 15%, 22%);
+  --input-bg: hsl(25, 18%, 16%);
   --ring: hsl(30, 55%, 55%);
 
   --chart-1: hsl(30, 55%, 55%);
@@ -121,6 +123,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-bg: var(--input-bg);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

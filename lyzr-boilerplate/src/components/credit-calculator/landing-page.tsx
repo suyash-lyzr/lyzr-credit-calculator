@@ -78,7 +78,7 @@ export function LandingPage({
               placeholder="Describe your use case..."
               disabled={isLoading}
               rows={1}
-              className="w-full min-h-[56px] max-h-[200px] py-4 px-4 pr-14 text-lg rounded-xl border-2 border-input bg-background focus:border-primary focus:outline-none focus:ring-0 resize-none overflow-hidden"
+              className="w-full min-h-[56px] max-h-[200px] py-4 px-4 pr-14 text-lg rounded-xl border-2 border-input bg-input-bg focus:border-primary focus:outline-none focus:ring-0 resize-none overflow-hidden"
             />
             <Button 
               type="submit" 
