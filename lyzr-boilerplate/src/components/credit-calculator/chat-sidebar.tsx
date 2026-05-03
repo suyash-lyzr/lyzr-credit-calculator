@@ -1,11 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { IconPlus, IconMessage, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconMessage, IconTrash, IconLogout, IconUser } from "@tabler/icons-react";
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
+  SidebarFooter,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -28,6 +29,8 @@ interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   onSelectSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
   onLogoClick?: () => void;
+  user?: { id: number; email: string } | null;
+  onLogout?: () => void;
 }
 
 export function ChatSidebar({
@@ -37,12 +40,14 @@ export function ChatSidebar({
   onSelectSession,
   onDeleteSession,
   onLogoClick,
+  user,
+  onLogout,
   ...props
 }: ChatSidebarProps) {
   return (
     <Sidebar collapsible="none" className="border-r" {...props}>
       <SidebarHeader className="p-4">
-        <button 
+        <button
           onClick={onLogoClick}
           className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
         >
@@ -65,7 +70,7 @@ export function ChatSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>Chat History</SidebarGroupLabel>
           <SidebarGroupContent>
-            <ScrollArea className="h-[calc(100vh-180px)]">
+            <ScrollArea className="h-[calc(100vh-260px)]">
               <SidebarMenu>
                 {sessions.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -99,6 +104,28 @@ export function ChatSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {user && (
+        <SidebarFooter className="border-t p-3">
+          <div className="flex items-center gap-2 px-1 mb-2 min-w-0">
+            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <IconUser className="h-4 w-4" />
+            </div>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-xs text-muted-foreground">Signed in</span>
+              <span className="text-xs font-medium truncate" title={user.email}>{user.email}</span>
+            </div>
+          </div>
+          <Button
+            onClick={onLogout}
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:text-foreground"
+          >
+            <IconLogout className="mr-2 h-4 w-4" />
+            Sign out
+          </Button>
+        </SidebarFooter>
+      )}
     </Sidebar>
   );
 }

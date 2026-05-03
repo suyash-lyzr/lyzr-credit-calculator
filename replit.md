@@ -23,6 +23,10 @@ Design language: warm earthy palette — cream/beige background `hsl(36, 33%, 94
 
 The application features a streaming API (`/api/chat`) for real-time text output and tool execution, using Server-Sent Events (SSE).
 
+Authentication uses passwordless email OTP (6-digit code, SHA-256 hashed, 10-min TTL, single active code per email enforced via row replacement, 5 attempts per code). OTP request and verify endpoints are rate-limited per email and per IP via an in-memory sliding-window limiter (`src/lib/rate-limit.ts`). Sessions are stored in the `sessions` table (32-byte token, 30-day TTL) and tracked via an httpOnly `lyzr_session` cookie (sameSite=lax, secure in production). `middleware.ts` redirects unauthenticated browser requests to `/login` and returns 401 for API requests, but every protected API route additionally calls `getCurrentUser()` server-side (defense in depth — middleware only checks cookie presence). SMTP is configured via `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` env vars and uses nodemailer (port 465 → SSL, otherwise STARTTLS).
+
+Chat history and saved templates are persisted per-user in PostgreSQL (`chat_sessions`, `templates` with `userId` FK, cascade delete). The credit-calculator client loads sessions from `/api/chat-sessions` on mount, debounces saves at 600ms, flushes pending writes on session switch and `beforeunload`, and keeps an in-memory artifacts cache in sync with live state so re-selecting a session never shows stale data. localStorage-based session storage has been removed.
+
 ## External Dependencies
 - **AI Model:** Anthropic Claude Opus 4.7 (`claude-opus-4-7`)
 - **Database:** External Neon PostgreSQL

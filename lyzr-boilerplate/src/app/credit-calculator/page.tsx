@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { ChatSidebar } from "@/components/credit-calculator/chat-sidebar";
 import { ChatInterface } from "@/components/credit-calculator/chat-interface";
@@ -21,146 +22,130 @@ import { TemplateManagerModal } from "@/components/credit-calculator/template-ma
 
 let idCounter = 0;
 function generateId() {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== "undefined") {
     idCounter += 1;
     return `id-${idCounter}-${Date.now()}`;
   }
   return `server-id-${idCounter++}`;
 }
 
-const STORAGE_KEY = 'lyzr-credit-calculator-sessions';
-const ARTIFACTS_STORAGE_KEY = 'lyzr-credit-calculator-artifacts';
-
-interface StoredArtifacts {
-  [sessionId: string]: {
+interface ServerChatSession {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  artifacts: {
     architecture: ArchitectureData | null;
     credits: CreditCalculation | null;
     roi: ROICalculation | null;
     review: ReviewValidation | null;
-  };
+  } | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-function loadSessionsFromStorage(): ChatSession[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed.map((s: ChatSession) => ({
-        ...s,
-        createdAt: new Date(s.createdAt),
-        updatedAt: new Date(s.updatedAt),
-        messages: s.messages.map((m: ChatMessage) => ({
-          ...m,
-          timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
-        })),
-      }));
-    }
-  } catch (e) {
-    console.error('Failed to load sessions from storage:', e);
-  }
-  return [];
+interface AuthUser {
+  id: number;
+  email: string;
 }
 
-function saveSessionsToStorage(sessions: ChatSession[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  } catch (e) {
-    console.error('Failed to save sessions to storage:', e);
-  }
-}
-
-function loadArtifactsFromStorage(): StoredArtifacts {
-  if (typeof window === 'undefined') return {};
-  try {
-    const stored = localStorage.getItem(ARTIFACTS_STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.error('Failed to load artifacts from storage:', e);
-  }
-  return {};
-}
-
-function saveArtifactsToStorage(artifacts: StoredArtifacts) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(ARTIFACTS_STORAGE_KEY, JSON.stringify(artifacts));
-  } catch (e) {
-    console.error('Failed to save artifacts to storage:', e);
-  }
-}
-
-function getSessionArtifacts(sessionId: string): { architecture: ArchitectureData | null; credits: CreditCalculation | null; roi: ROICalculation | null; review: ReviewValidation | null } {
-  const all = loadArtifactsFromStorage();
-  return all[sessionId] || { architecture: null, credits: null, roi: null, review: null };
-}
-
-function saveSessionArtifacts(sessionId: string, artifacts: { architecture: ArchitectureData | null; credits: CreditCalculation | null; roi: ROICalculation | null; review: ReviewValidation | null }) {
-  const all = loadArtifactsFromStorage();
-  all[sessionId] = artifacts;
-  saveArtifactsToStorage(all);
-}
-
-function deleteSessionArtifacts(sessionId: string) {
-  const all = loadArtifactsFromStorage();
-  delete all[sessionId];
-  saveArtifactsToStorage(all);
-}
+const EMPTY_ARTIFACTS: ArtifactState = {
+  architecture: null,
+  credits: null,
+  roi: null,
+  review: null,
+  isLoading: { architecture: false, credits: false, roi: false, review: false },
+};
 
 export default function CreditCalculatorPage() {
+  const router = useRouter();
+  const [user, setUser] = React.useState<AuthUser | null>(null);
   const [sessions, setSessions] = React.useState<ChatSession[]>([]);
+  const [sessionArtifacts, setSessionArtifacts] = React.useState<
+    Record<string, { architecture: ArchitectureData | null; credits: CreditCalculation | null; roi: ROICalculation | null; review: ReviewValidation | null }>
+  >({});
   const [activeSessionId, setActiveSessionId] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [streamingContent, setStreamingContent] = React.useState("");
-  const [artifactState, setArtifactState] = React.useState<ArtifactState>({
-    architecture: null,
-    credits: null,
-    roi: null,
-    review: null,
-    isLoading: {
-      architecture: false,
-      credits: false,
-      roi: false,
-      review: false,
-    },
-  });
+  const [artifactState, setArtifactState] = React.useState<ArtifactState>(EMPTY_ARTIFACTS);
   const [hasStartedConversation, setHasStartedConversation] = React.useState(false);
   const [isHydrated, setIsHydrated] = React.useState(false);
   const [templates, setTemplates] = React.useState<SavedTemplate[]>([]);
   const [showSaveTemplateModal, setShowSaveTemplateModal] = React.useState(false);
   const [showTemplateManager, setShowTemplateManager] = React.useState(false);
 
+  // --- Auth + initial data load ---
   React.useEffect(() => {
-    const loaded = loadSessionsFromStorage();
-    if (loaded.length > 0) {
-      setSessions(loaded);
-    }
-    
-    async function fetchTemplates() {
+    let cancelled = false;
+    async function bootstrap() {
       try {
-        const response = await fetch('/api/templates');
-        if (response.ok) {
-          const data = await response.json();
-          setTemplates(data.map((t: SavedTemplate) => ({
-            ...t,
-            createdAt: new Date(t.createdAt),
-            updatedAt: new Date(t.updatedAt),
-          })));
+        const meRes = await fetch("/api/auth/me");
+        if (meRes.status === 401) {
+          router.replace("/login?next=/credit-calculator");
+          return;
+        }
+        const meJson = await meRes.json();
+        if (cancelled) return;
+        setUser(meJson.user);
+
+        const [sessionsRes, templatesRes] = await Promise.all([
+          fetch("/api/chat-sessions"),
+          fetch("/api/templates"),
+        ]);
+        if (cancelled) return;
+
+        if (sessionsRes.ok) {
+          const rows: ServerChatSession[] = await sessionsRes.json();
+          const loaded: ChatSession[] = rows.map((r) => ({
+            id: r.id,
+            title: r.title,
+            messages: (r.messages || []).map((m) => ({
+              ...m,
+              timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
+            })),
+            createdAt: new Date(r.createdAt),
+            updatedAt: new Date(r.updatedAt),
+          }));
+          const artifactsMap: typeof sessionArtifacts = {};
+          for (const r of rows) {
+            if (r.artifacts) {
+              artifactsMap[r.id] = {
+                architecture: r.artifacts.architecture ?? null,
+                credits: r.artifacts.credits ?? null,
+                roi: r.artifacts.roi ?? null,
+                review: r.artifacts.review ?? null,
+              };
+            }
+          }
+          setSessions(loaded);
+          setSessionArtifacts(artifactsMap);
+        }
+
+        if (templatesRes.ok) {
+          const data = await templatesRes.json();
+          setTemplates(
+            data.map((t: SavedTemplate) => ({
+              ...t,
+              createdAt: new Date(t.createdAt),
+              updatedAt: new Date(t.updatedAt),
+            }))
+          );
         }
       } catch (e) {
-        console.error('Failed to fetch templates:', e);
+        console.error("Failed to bootstrap:", e);
+      } finally {
+        if (!cancelled) setIsHydrated(true);
       }
     }
-    fetchTemplates();
-    setIsHydrated(true);
-  }, []);
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
+  // --- Cmd+Shift+S shortcut ---
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (!hasStartedConversation) {
           setShowTemplateManager(true);
@@ -169,26 +154,128 @@ export default function CreditCalculatorPage() {
         }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [artifactState, hasStartedConversation]);
 
-  React.useEffect(() => {
-    if (isHydrated && sessions.length > 0) {
-      saveSessionsToStorage(sessions);
-    }
-  }, [sessions, isHydrated]);
+  // --- Persist active session to DB (debounced) ---
+  const persistSession = React.useCallback(
+    async (sessionId: string) => {
+      const s = sessions.find((x) => x.id === sessionId);
+      if (!s) return;
+      const arts =
+        activeSessionId === sessionId
+          ? {
+              architecture: artifactState.architecture,
+              credits: artifactState.credits,
+              roi: artifactState.roi,
+              review: artifactState.review,
+            }
+          : sessionArtifacts[sessionId] || null;
+      try {
+        const res = await fetch("/api/chat-sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: s.id,
+            title: s.title,
+            messages: s.messages,
+            artifacts: arts,
+          }),
+        });
+        if (res.status === 401) {
+          router.replace("/login?next=/credit-calculator");
+        }
+      } catch (e) {
+        console.error("Failed to persist session:", e);
+      }
+    },
+    [sessions, activeSessionId, artifactState, sessionArtifacts, router]
+  );
 
+  // Keep sessionArtifacts cache in sync with the live artifactState for the
+  // currently active session, so re-selecting it later doesn't show stale data.
   React.useEffect(() => {
-    if (isHydrated && activeSessionId && (artifactState.architecture || artifactState.credits || artifactState.roi || artifactState.review)) {
-      saveSessionArtifacts(activeSessionId, {
+    if (!activeSessionId) return;
+    if (
+      !artifactState.architecture &&
+      !artifactState.credits &&
+      !artifactState.roi &&
+      !artifactState.review
+    )
+      return;
+    setSessionArtifacts((prev) => ({
+      ...prev,
+      [activeSessionId]: {
         architecture: artifactState.architecture,
         credits: artifactState.credits,
         roi: artifactState.roi,
         review: artifactState.review,
-      });
+      },
+    }));
+  }, [
+    activeSessionId,
+    artifactState.architecture,
+    artifactState.credits,
+    artifactState.roi,
+    artifactState.review,
+  ]);
+
+  // Debounced save when active session changes. Tracks the session id the
+  // pending save belongs to so a session switch flushes immediately rather
+  // than dropping the save.
+  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveSessionIdRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (!isHydrated || !activeSessionId) return;
+
+    // If there's a pending save for a *different* session, flush it now.
+    if (
+      pendingSaveSessionIdRef.current &&
+      pendingSaveSessionIdRef.current !== activeSessionId
+    ) {
+      const idToFlush = pendingSaveSessionIdRef.current;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      pendingSaveSessionIdRef.current = null;
+      void persistSession(idToFlush);
     }
-  }, [isHydrated, activeSessionId, artifactState.architecture, artifactState.credits, artifactState.roi, artifactState.review]);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    pendingSaveSessionIdRef.current = activeSessionId;
+    const idToSave = activeSessionId;
+    saveTimerRef.current = setTimeout(() => {
+      pendingSaveSessionIdRef.current = null;
+      void persistSession(idToSave);
+    }, 600);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [
+    isHydrated,
+    activeSessionId,
+    sessions,
+    artifactState.architecture,
+    artifactState.credits,
+    artifactState.roi,
+    artifactState.review,
+    persistSession,
+  ]);
+
+  // Flush pending save before unload.
+  React.useEffect(() => {
+    const handler = () => {
+      if (pendingSaveSessionIdRef.current) {
+        const id = pendingSaveSessionIdRef.current;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        void persistSession(id);
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [persistSession]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -202,32 +289,34 @@ export default function CreditCalculatorPage() {
     };
     setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
-    setArtifactState({
-      architecture: null,
-      credits: null,
-      roi: null,
-      review: null,
-      isLoading: { architecture: false, credits: false, roi: false, review: false },
-    });
+    setArtifactState(EMPTY_ARTIFACTS);
+    setHasStartedConversation(false);
   }, []);
 
-  const selectSession = React.useCallback((sessionId: string) => {
-    setActiveSessionId(sessionId);
-    setHasStartedConversation(true);
-    const savedArtifacts = getSessionArtifacts(sessionId);
-    setArtifactState({
-      architecture: savedArtifacts.architecture,
-      credits: savedArtifacts.credits,
-      roi: savedArtifacts.roi,
-      review: savedArtifacts.review,
-      isLoading: { architecture: false, credits: false, roi: false, review: false },
-    });
-  }, []);
+  const selectSession = React.useCallback(
+    (sessionId: string) => {
+      setActiveSessionId(sessionId);
+      setHasStartedConversation(true);
+      const saved = sessionArtifacts[sessionId];
+      setArtifactState({
+        architecture: saved?.architecture ?? null,
+        credits: saved?.credits ?? null,
+        roi: saved?.roi ?? null,
+        review: saved?.review ?? null,
+        isLoading: { architecture: false, credits: false, roi: false, review: false },
+      });
+    },
+    [sessionArtifacts]
+  );
 
   const deleteSession = React.useCallback(
-    (sessionId: string) => {
+    async (sessionId: string) => {
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      deleteSessionArtifacts(sessionId);
+      setSessionArtifacts((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
       if (activeSessionId === sessionId) {
         const remaining = sessions.filter((s) => s.id !== sessionId);
         if (remaining.length > 0) {
@@ -237,6 +326,11 @@ export default function CreditCalculatorPage() {
           setHasStartedConversation(false);
         }
       }
+      try {
+        await fetch(`/api/chat-sessions/${sessionId}`, { method: "DELETE" });
+      } catch (e) {
+        console.error("Failed to delete session:", e);
+      }
     },
     [activeSessionId, sessions]
   );
@@ -244,55 +338,65 @@ export default function CreditCalculatorPage() {
   const goToHome = React.useCallback(() => {
     setActiveSessionId(null);
     setHasStartedConversation(false);
-    setArtifactState({
-      architecture: null,
-      credits: null,
-      roi: null,
-      review: null,
-      isLoading: { architecture: false, credits: false, roi: false, review: false },
-    });
+    setArtifactState(EMPTY_ARTIFACTS);
   }, []);
 
-  const saveTemplate = React.useCallback(async (name: string, description: string) => {
-    if (!artifactState.architecture || !artifactState.credits || !artifactState.roi) return;
-    
-    const activeSessionData = sessions.find((s) => s.id === activeSessionId);
-    const useCase = activeSessionData?.messages[0]?.content || name;
-    const allMessages = activeSessionData?.messages || [];
-    
-    const chatHistory = allMessages.filter((msg) => {
-      if (msg.role === 'user' && msg.content.startsWith('My selections:')) return false;
-      if (msg.role === 'assistant' && msg.content.includes('"questions"')) return false;
-      return true;
-    });
-    
+  const handleLogout = React.useCallback(async () => {
     try {
-      const response = await fetch('/api/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          description,
-          useCase,
-          architecture: artifactState.architecture,
-          credits: artifactState.credits,
-          roi: artifactState.roi,
-          chatHistory,
-        }),
-      });
-      
-      if (response.ok) {
-        const newTemplate = await response.json();
-        setTemplates((prev) => [{
-          ...newTemplate,
-          createdAt: new Date(newTemplate.createdAt),
-          updatedAt: new Date(newTemplate.updatedAt),
-        }, ...prev]);
-      }
+      await fetch("/api/auth/logout", { method: "POST" });
     } catch (e) {
-      console.error('Failed to save template:', e);
+      console.error("Logout failed:", e);
+    } finally {
+      router.replace("/login");
     }
-  }, [artifactState, activeSessionId, sessions]);
+  }, [router]);
+
+  const saveTemplate = React.useCallback(
+    async (name: string, description: string) => {
+      if (!artifactState.architecture || !artifactState.credits || !artifactState.roi) return;
+
+      const activeSessionData = sessions.find((s) => s.id === activeSessionId);
+      const useCase = activeSessionData?.messages[0]?.content || name;
+      const allMessages = activeSessionData?.messages || [];
+
+      const chatHistory = allMessages.filter((msg) => {
+        if (msg.role === "user" && msg.content.startsWith("My selections:")) return false;
+        if (msg.role === "assistant" && msg.content.includes('"questions"')) return false;
+        return true;
+      });
+
+      try {
+        const response = await fetch("/api/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            description,
+            useCase,
+            architecture: artifactState.architecture,
+            credits: artifactState.credits,
+            roi: artifactState.roi,
+            chatHistory,
+          }),
+        });
+
+        if (response.ok) {
+          const newTemplate = await response.json();
+          setTemplates((prev) => [
+            {
+              ...newTemplate,
+              createdAt: new Date(newTemplate.createdAt),
+              updatedAt: new Date(newTemplate.updatedAt),
+            },
+            ...prev,
+          ]);
+        }
+      } catch (e) {
+        console.error("Failed to save template:", e);
+      }
+    },
+    [artifactState, activeSessionId, sessions]
+  );
 
   const loadTemplate = React.useCallback((template: SavedTemplate) => {
     const newSession: ChatSession = {
@@ -316,21 +420,19 @@ export default function CreditCalculatorPage() {
 
   const deleteTemplate = React.useCallback(async (templateId: number) => {
     try {
-      const response = await fetch(`/api/templates/${templateId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
       if (response.ok) {
         setTemplates((prev) => prev.filter((t) => t.id !== templateId));
       }
     } catch (e) {
-      console.error('Failed to delete template:', e);
+      console.error("Failed to delete template:", e);
     }
   }, []);
 
   const sendMessage = React.useCallback(
     async (content: string) => {
       let currentSessionId = activeSessionId;
-      
+
       if (!currentSessionId) {
         const newSession: ChatSession = {
           id: generateId(),
@@ -342,13 +444,7 @@ export default function CreditCalculatorPage() {
         setSessions((prev) => [newSession, ...prev]);
         setActiveSessionId(newSession.id);
         currentSessionId = newSession.id;
-        setArtifactState({
-          architecture: null,
-          credits: null,
-          roi: null,
-          review: null,
-          isLoading: { architecture: false, credits: false, roi: false, review: false },
-        });
+        setArtifactState(EMPTY_ARTIFACTS);
       }
 
       setHasStartedConversation(true);
@@ -368,12 +464,7 @@ export default function CreditCalculatorPage() {
               session.messages.length === 0
                 ? content.slice(0, 30) + (content.length > 30 ? "..." : "")
                 : session.title;
-            return {
-              ...session,
-              messages: updatedMessages,
-              title,
-              updatedAt: new Date(),
-            };
+            return { ...session, messages: updatedMessages, title, updatedAt: new Date() };
           }
           return session;
         })
@@ -395,66 +486,47 @@ export default function CreditCalculatorPage() {
       let buffer = "";
 
       const processEvent = (eventData: { event: string; data: unknown }) => {
-        console.log(`[FE] Received event: ${eventData.event} at ${new Date().toISOString()}`, eventData.data);
-        
         switch (eventData.event) {
           case "text":
             accumulatedContent += (eventData.data as { content: string }).content;
             setStreamingContent(accumulatedContent);
             break;
 
-          case "tool_start":
+          case "tool_start": {
             const toolName = (eventData.data as { tool: string }).tool;
-            console.log(`[FE] tool_start: ${toolName}`);
             if (toolName === "generate_architecture") {
-              setArtifactState((prev) => ({
-                ...prev,
-                isLoading: { ...prev.isLoading, architecture: true },
-              }));
+              setArtifactState((prev) => ({ ...prev, isLoading: { ...prev.isLoading, architecture: true } }));
             } else if (toolName === "calculate_credits") {
-              setArtifactState((prev) => ({
-                ...prev,
-                isLoading: { ...prev.isLoading, credits: true },
-              }));
+              setArtifactState((prev) => ({ ...prev, isLoading: { ...prev.isLoading, credits: true } }));
             } else if (toolName === "calculate_roi") {
-              setArtifactState((prev) => ({
-                ...prev,
-                isLoading: { ...prev.isLoading, roi: true },
-              }));
+              setArtifactState((prev) => ({ ...prev, isLoading: { ...prev.isLoading, roi: true } }));
             } else if (toolName === "review_and_validate") {
-              setArtifactState((prev) => ({
-                ...prev,
-                isLoading: { ...prev.isLoading, review: true },
-              }));
+              setArtifactState((prev) => ({ ...prev, isLoading: { ...prev.isLoading, review: true } }));
             }
             break;
+          }
 
-          case "tool_result":
+          case "tool_result": {
             const toolResult = eventData.data as { tool: string; data: unknown };
-            console.log(`[FE] tool_result: ${toolResult.tool}`, Object.keys(toolResult.data as object || {}));
             if (toolResult.tool === "generate_architecture") {
-              console.log(`[FE] Setting architecture data`);
               setArtifactState((prev) => ({
                 ...prev,
                 architecture: toolResult.data as ArchitectureData,
                 isLoading: { ...prev.isLoading, architecture: false },
               }));
             } else if (toolResult.tool === "calculate_credits") {
-              console.log(`[FE] Setting credits data`);
               setArtifactState((prev) => ({
                 ...prev,
                 credits: toolResult.data as CreditCalculation,
                 isLoading: { ...prev.isLoading, credits: false },
               }));
             } else if (toolResult.tool === "calculate_roi") {
-              console.log(`[FE] Setting ROI data`);
               setArtifactState((prev) => ({
                 ...prev,
                 roi: toolResult.data as ROICalculation,
                 isLoading: { ...prev.isLoading, roi: false },
               }));
             } else if (toolResult.tool === "review_and_validate") {
-              console.log(`[FE] Setting review data`);
               setArtifactState((prev) => ({
                 ...prev,
                 review: toolResult.data as ReviewValidation,
@@ -462,6 +534,7 @@ export default function CreditCalculatorPage() {
               }));
             }
             break;
+          }
 
           case "error":
             console.error("Chat error:", (eventData.data as { message: string }).message);
@@ -476,6 +549,10 @@ export default function CreditCalculatorPage() {
           body: JSON.stringify({ messages }),
         });
 
+        if (response.status === 401) {
+          router.replace("/login?next=/credit-calculator");
+          return;
+        }
         if (!response.ok) throw new Error("Failed to send message");
 
         const reader = response.body?.getReader();
@@ -483,18 +560,13 @@ export default function CreditCalculatorPage() {
 
         const decoder = new TextDecoder();
 
-        console.log("[FE] Starting stream read...");
         while (true) {
           const { done, value } = await reader.read();
-          if (done) {
-            console.log("[FE] Stream done");
-            break;
-          }
+          if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-          console.log(`[FE] Received chunk (${chunk.length} chars)`);
           buffer += chunk;
-          
+
           const lines = buffer.split("\n\n");
           buffer = lines.pop() || "";
 
@@ -546,8 +618,17 @@ export default function CreditCalculatorPage() {
         setStreamingContent("");
       }
     },
-    [activeSessionId, sessions]
+    [activeSessionId, sessions, router]
   );
+
+  // Don't render UI until we know the user is authenticated
+  if (!user) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm">Loading...</div>
+      </div>
+    );
+  }
 
   if (!hasStartedConversation) {
     return (
@@ -560,6 +641,8 @@ export default function CreditCalculatorPage() {
             onSelectSession={selectSession}
             onDeleteSession={deleteSession}
             onLogoClick={goToHome}
+            user={user}
+            onLogout={handleLogout}
             className="w-64 shrink-0"
           />
           <div className="flex-1 flex items-center justify-center">
@@ -592,6 +675,8 @@ export default function CreditCalculatorPage() {
           onSelectSession={selectSession}
           onDeleteSession={deleteSession}
           onLogoClick={goToHome}
+          user={user}
+          onLogout={handleLogout}
           className="w-64 shrink-0"
         />
         <div className="flex flex-1 min-w-0 h-screen overflow-hidden">
