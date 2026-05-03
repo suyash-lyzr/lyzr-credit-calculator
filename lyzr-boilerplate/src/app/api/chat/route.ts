@@ -265,29 +265,54 @@ Adjust based on actual KB context size and conversational vs transactional natur
 
 --- STEP E: Build the detailed LLM step table (llm_steps) ---
 
-You MUST emit ONE row in llm_steps for EVERY step in runs_breakdown. This is the canonical, customer-visible LLM breakdown — vague aggregations are not acceptable.
+CORE PRINCIPLE: EVERY agent run consumes at least one LLM call. The sum of llm_steps[].annual_calls
+MUST equal total_annual_runs × (1 + llm_buffer_pct/100) within ±1%. If it doesn't, your math is wrong
+and the customer will spot it immediately.
 
-For each step:
+You MUST emit ONE row in llm_steps for EVERY step in runs_breakdown. (If a step legitimately uses
+two different models — e.g., cheap router + reasoner inside one agent run — emit one row per model
+and split runs_per_unit between them so they sum to the step's effective_runs.)
+
+Compute the OVERHEAD FACTOR once and reuse it for every row:
+
+    overhead_factor = total_annual_runs / steady_state_annual_runs
+
+(This factor folds in continuous-ops, onboarding, and the outer edge-case buffer. It is typically
+in the range 1.15–1.65. If you compute < 1.0 you've made an error.)
+
+For each LLM step row:
   • step_name           → MUST exactly match the step_name in runs_breakdown
   • action              → 1 sentence on what the LLM is doing in that step
-  • runs_per_unit       → usually equals the "runs" value of the matching runs_breakdown step (split if a step uses multiple models — emit one row per model)
-  • model_name + provider → pick from the May 2026 lineup using STEPS A-C (cheapest model that clears the bar for THIS step). DO NOT use one model everywhere.
-  • model_rationale     → 1 short sentence explaining the choice (e.g., "Routing only — Nano is enough", "Long contract context needs 2M ctx Pro")
+  • runs_per_unit       → the EFFECTIVE runs for this step per business unit
+                          = step.runs × step.iteration_multiplier
+                          (i.e. step.effective_runs from runs_breakdown — NOT the raw "runs" value)
+                          If two models split a step, the two rows' runs_per_unit must sum to step.effective_runs.
+  • model_name + provider → pick from the May 2026 lineup using STEPS A-C. Mix models — do NOT use one model everywhere.
+  • model_rationale     → 1 short sentence on why THIS model for THIS step
   • input_tokens / output_tokens → average per LLM call for THAT step (use Step D table, adjusted for KB context)
-  • input_rate_per_1m / output_rate_per_1m → from the pricing table above for the chosen model
+  • input_rate_per_1m / output_rate_per_1m → from the pricing table above
   • cost_per_call       = (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000
   • cost_per_unit       = cost_per_call × runs_per_unit
-  • annual_calls        = the share of total_annual_runs attributable to this step × (1 + llm_buffer_pct / 100)
-                          where the share = (step.runs × step.iteration_multiplier × effective_unit_volume)
-                          scaled up by the same overhead factor used to expand steady_state → total_annual_runs
-                          (i.e. multiply by total_annual_runs / steady_state_annual_runs so continuous-ops,
-                          onboarding, and edge-case buffer all flow through proportionally).
+  • annual_calls        = runs_per_unit × effective_unit_volume × overhead_factor × (1 + llm_buffer_pct/100)
+
+                          For MULTIPLE WORKLOADS (rows[] populated): replace effective_unit_volume with
+                          sum of effective_unit_volume across all rows (i.e. total effective volume
+                          processed across backlog + ongoing). The LLM table is a CONSOLIDATED view.
+
   • annual_cost         = annual_calls × cost_per_call
 
-llm_buffer_pct: 20-40% (separate from agent-run buffers). LLM buffer accounts for retries, self-correction loops, multi-sample generation, and tool-use iterations WITHIN a single agent run. Keep this LOWER than before since funnel/iteration/onboarding/continuous-ops are now modeled explicitly.
+MANDATORY SANITY CHECKS before emitting:
+  1. sum(llm_steps[].annual_calls) ≈ total_annual_runs × (1 + llm_buffer_pct/100)   (within ±1%)
+  2. sum(row.runs_per_unit) ≈ effective_runs_per_unit (when one model per step) or = effective_runs_per_unit (when steps are split across models)
+  3. Every annual_calls value is ≥ unit_volume (because overhead_factor ≥ 1 and effective volume ≥ stated volume)
+  4. llm_per_unit_cost = sum of cost_per_unit (one-pass per-unit cost, no overhead factor — that's per-unit not annual)
 
-llm_per_unit_cost = sum of cost_per_unit across all llm_steps
-llm_annual_cost   = sum of annual_cost across all llm_steps
+If a check fails, RECOMPUTE — do not ship a bad table.
+
+llm_buffer_pct: 15-30% (separate from agent-run buffers). LLM buffer accounts for retries, self-correction loops, multi-sample generation, and tool-use iterations WITHIN a single agent run. Keep this LOWER than before since funnel/iteration/onboarding/continuous-ops are now modeled explicitly in the volume waterfall.
+
+llm_per_unit_cost = sum of cost_per_unit across all llm_steps  (cost to process ONE business unit, no overhead)
+llm_annual_cost   = sum of annual_cost across all llm_steps    (this fully reconciles with the agent-run total)
 
 llm_breakdown (per-model rollup) is OPTIONAL — only fill it if it adds clarity, otherwise omit.
 
@@ -417,7 +442,7 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
             properties: {
               step_name: { type: "string", description: "MUST match a step_name from runs_breakdown (e.g., 'Triage', 'Extract Fields', 'Validate')" },
               action: { type: "string", description: "1 sentence describing what the LLM is doing in this step (e.g., 'Classify ticket intent and route', 'Extract structured invoice fields')" },
-              runs_per_unit: { type: "number", description: "How many LLM calls this step contributes per business unit (usually = the runs value from runs_breakdown for this step)" },
+              runs_per_unit: { type: "number", description: "EFFECTIVE LLM calls per business unit for this step = step.runs × step.iteration_multiplier (i.e. step.effective_runs from runs_breakdown). NOT the raw base runs. If a step is split across two models, the two rows' runs_per_unit must sum to step.effective_runs." },
               model_name: { type: "string", description: "Latest May 2026 model name, e.g., 'GPT-5.4 Nano', 'GPT-5.4', 'o3', 'o4-mini', 'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Claude Opus 4.7', 'Gemini 3 Flash', 'Gemini 3.1 Pro', 'Gemini 3.1 Flash-Lite'" },
               provider: { type: "string", description: "OpenAI | Anthropic | Google" },
               model_rationale: { type: "string", description: "1 short sentence on why THIS model for THIS step (e.g., 'Cheap classification — Nano is enough', 'Long-context contract analysis needs 1M ctx')" },
@@ -427,7 +452,7 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
               output_rate_per_1m: { type: "number", description: "USD per 1M output tokens for the chosen model (provider rate, no markup)" },
               cost_per_call: { type: "number", description: "= (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000" },
               cost_per_unit: { type: "number", description: "= cost_per_call × runs_per_unit" },
-              annual_calls: { type: "number", description: "= runs_per_unit × unit_volume × (1 + llm_buffer_pct/100)" },
+              annual_calls: { type: "number", description: "= runs_per_unit (effective) × effective_unit_volume × overhead_factor × (1 + llm_buffer_pct/100), where overhead_factor = total_annual_runs / steady_state_annual_runs. For multi-workload (rows[]), use sum of effective_unit_volume across rows. SANITY CHECK: sum across all llm_steps MUST ≈ total_annual_runs × (1 + llm_buffer_pct/100)." },
               annual_cost: { type: "number", description: "= annual_calls × cost_per_call" },
             },
             required: [
