@@ -100,7 +100,7 @@ export default function CreditCalculatorPage() {
             title: r.title,
             messages: (r.messages || []).map((m) => ({
               ...m,
-              timestamp: m.timestamp ? new Date(m.timestamp) : undefined,
+              timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
             })),
             createdAt: new Date(r.createdAt),
             updatedAt: new Date(r.updatedAt),
