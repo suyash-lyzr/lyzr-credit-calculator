@@ -100,9 +100,13 @@ export function TemplateManagerModal({
 
                 <div className="mt-auto pt-3 border-t border-border/50">
                   <div className="text-xs text-muted-foreground mb-2 font-mono line-clamp-1">
-                    {template.architecture.architecture_pattern} | {template.architecture.architecture_counts.n_agents} Agent{template.architecture.architecture_counts.n_agents !== 1 ? 's' : ''}
-                    {template.architecture.architecture_counts.n_kb > 0 && ` | KB`}
-                    {template.architecture.architecture_counts.n_tools > 0 && ` | ${template.architecture.architecture_counts.n_tools} Tools`}
+                    {template.architecture.workloads && template.architecture.workloads.length > 0
+                      ? template.architecture.workloads
+                          .map((w) => w.complexity)
+                          .join(" + ")
+                      : template.architecture.architecture_counts
+                        ? `${template.architecture.architecture_pattern ?? "Architecture"} | ${template.architecture.architecture_counts.n_agents} Agent${template.architecture.architecture_counts.n_agents !== 1 ? "s" : ""}`
+                        : (template.architecture.architecture_pattern ?? "Architecture")}
                   </div>
                   
                   <div className="flex items-center justify-between text-xs">

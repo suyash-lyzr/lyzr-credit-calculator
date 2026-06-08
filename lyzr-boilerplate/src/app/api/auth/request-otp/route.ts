@@ -42,7 +42,14 @@ export async function POST(req: NextRequest) {
 
     const code = generateOtp();
     await storeOtp(normalized, code);
-    await sendOtpEmail(normalized, code);
+
+    // Dev convenience: print the code to the server console instead of emailing it.
+    // Enable by setting OTP_DEV_LOG=true (never set this in production).
+    if (process.env.OTP_DEV_LOG === "true") {
+      console.log(`\n🔑 [dev] OTP login code for ${normalized}: ${code}\n`);
+    } else {
+      await sendOtpEmail(normalized, code);
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("[auth/request-otp]", e);

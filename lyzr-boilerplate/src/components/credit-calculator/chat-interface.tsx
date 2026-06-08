@@ -32,6 +32,24 @@ function removeQuestionnaireJson(content: string): string {
   return content.replace(/```json\s*\{[\s\S]*?"type":\s*"questionnaire"[\s\S]*?\}\s*```/g, '').trim();
 }
 
+// The model sometimes glues a markdown heading onto the end of a sentence
+// ("...then price it.## Architecture") so it renders as literal text instead of a heading.
+// Force every '#'-heading onto its own line with a blank line before it. Deterministic, so it
+// holds for any use case regardless of how the model phrases its lead-in.
+function normalizeMarkdown(content: string): string {
+  return content
+    // The model writes "~" to mean "approximately" ("~30 min", "~$7,956"), but GFM treats
+    // "~text~" as STRIKETHROUGH, so a pair of these silently strikes a whole sentence. Convert a
+    // tilde used as "approximately" (followed by a digit or "$", not part of a real "~~" span)
+    // into "≈" so it renders correctly. Leaves genuine "~~strikethrough~~" untouched.
+    .replace(/(?<!~)~(?!~)(?=\s*[$\d])/g, "≈")
+    // Break a heading (##..######) stuck to preceding text on the same line:
+    // "text.## H" -> "text.\n\n## H". Restricted to 2+ '#' so it can't misfire on "C# ".
+    .replace(/([^\n])(#{2,6}\s)/g, "$1\n\n$2")
+    // Collapse any run of 3+ newlines the above may create down to a clean paragraph break.
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 function isStreamingQuestionnaire(content: string): boolean {
   const jsonStart = content.includes('```json') && content.includes('"type"');
   const hasQuestionnaireMarker = content.includes('"questionnaire"') || content.includes('"questions"');
@@ -111,7 +129,7 @@ export function ChatInterface({
       <div className="space-y-3">
         {textContent && (
           <div className="text-sm">
-            <Streamdown>{textContent}</Streamdown>
+            <Streamdown>{normalizeMarkdown(textContent)}</Streamdown>
           </div>
         )}
         {questionnaire && (isLastAssistantMessage || isQuestionnaireSubmitted) && !isLoading && (
@@ -216,7 +234,7 @@ export function ChatInterface({
                   <div className="space-y-2">
                     {getPreQuestionnaireText(streamingContent) && (
                       <div className="text-sm">
-                        <Streamdown>{getPreQuestionnaireText(streamingContent)}</Streamdown>
+                        <Streamdown>{normalizeMarkdown(getPreQuestionnaireText(streamingContent))}</Streamdown>
                       </div>
                     )}
                     <div className="flex items-center gap-2 text-muted-foreground">
@@ -226,7 +244,7 @@ export function ChatInterface({
                   </div>
                 ) : (
                   <div className="text-sm">
-                    <Streamdown>{removeQuestionnaireJson(streamingContent)}</Streamdown>
+                    <Streamdown>{normalizeMarkdown(removeQuestionnaireJson(streamingContent))}</Streamdown>
                   </div>
                 )}
               </div>

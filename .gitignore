@@ -1,0 +1,38 @@
+# ---- OS / editor junk ----
+.DS_Store
+*.swp
+Untitled
+
+# ---- Secrets / env (never commit) ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Dependencies / build output ----
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# ---- Replit / agent scaffolding (not needed to run or deploy the app) ----
+.agents/
+.local/
+.config/
+.upm/
+.cache/
+
+# ---- Logs ----
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Vercel ----
+.vercel
+
+# ---- Unrelated nested sub-project (separate agent toolkit) ----
+# Remove this line if you DO want to push the superflow-builder folder.
+superflow-builder/

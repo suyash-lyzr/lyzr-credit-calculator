@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { computeTotals, computeRoiComparison, type Deployment, type WorkloadInput } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,596 +13,185 @@ const anthropic = new Anthropic({
 const tools: Anthropic.Tool[] = [
   {
     name: "generate_architecture",
-    description: `Analyze the user's use case and design a multi-agent architecture.
+    description: `Design the production-grade solution for the use case, decompose it into agent WORKLOADS, assign each the right orchestration tier, then produce a Mermaid diagram.
 
-Determine these architecture properties:
+=== DESIGN ALTITUDE: PRODUCTION-REALISTIC (think like a solutions architect) ===
 
-N_Agents: How many agents are needed?
-- Single Agent = 1
-- Orchestrator Pattern = 1 Manager + X Sub-agents
-- Multi-Agent Chain = Total agents in workflow
+A user gives a one-line use case. Do NOT design the bare-minimum that technically works. First envision the COMPLETE solution a competent Lyzr solutions architect would actually deploy to PRODUCTION — including the supporting capabilities the use case implies even if unstated:
+  ingestion/trigger · classification/triage · KB retrieval (RAG) · drafting/resolution · validation/quality checks · confidence-based decisioning · human-in-the-loop escalation · system-of-record logging/write-back · monitoring.
+THEN apply the rubric to that REAL design. Two guardrails:
+  - NO SANDBAGGING: don't collapse a confidence-gated, human-escalating, system-integrated workflow into a lone single agent just because it's cheaper. Under-scoping under-prices and loses customer trust.
+  - NO PADDING: every agent/node must earn its place via a real production need (quality, reliability, compliance, escalation, integration). Don't split into many sub-agents if one agent + KB does the job just as well.
+"Cheapest pattern that does the job" means the cheapest pattern that does the REAL production job — not a toy version.
 
-N_KB: Does the use case involve Docs, PDFs, or Policies? (1 = Yes, 0 = No)
-N_RAI: Is the domain Regulated (Finance/HR/Legal) or Public Facing? (1 = Yes, 0 = No)
-N_Tools: Count of distinct external tool integrations
+Worked example: "customer support ticket triage" in production = classify intent/urgency + retrieve KB + draft resolution OR route + confidence gate (auto-resolve vs escalate) + escalate low-confidence to a human + log outcome to the ticketing system. That has a confidence branch + HITL + external write-back => it is a SUPERFLOW, not a lone single agent. (A pure "just tag and route" with nothing else would be a single agent.)
 
-Determine scenario flags (these still inform LLM model selection):
-B_Mem: 1 if Conversational, 0 if Transactional
-B_KB: 1 if Search/Analysis is needed, 0 otherwise
-B_RAI: 1 if High Complexity / External Output, 0 otherwise
-B_API: Number of external tool calls per run
+=== ORCHESTRATION SELECTION RUBRIC (decide per workload) ===
 
-Choose complexity:
-- LOW: 1 agent, 0-1 connections, simple Q&A
-- MEDIUM: 2-3 agents OR orchestrator pattern, 2+ connections
-- HIGH: 3+ agents in chain, mission-critical, 3+ connections
+Break the production solution into its separate jobs (sub-use-cases). For EACH job pick the cheapest pattern that does that real job well. A real application is usually a MIXTURE.
 
-Mermaid diagram MUST use clean professional text. NEVER include emojis anywhere.`,
+1. SIMPLE / Single Agent — one task one agent can finish end-to-end. An agent may use Knowledge Base, tools, memory, data query, voice, a scheduler, or a webhook trigger and STILL be a Single Agent — none of those change the tier. This is the common case; default here.
+
+2. COMPLEX / Superflow — a deterministic workflow that needs any of Superflow's SPECIAL NODES (this is the decisive test):
+   - Human-in-the-loop approval (Wait for Approval)
+   - Deterministic control flow: If/Else, Switch, Loop, Filter, Merge
+   - Non-LLM / integration steps: HTTP, Code, Parse/Extract documents, Crypto, Set/transform
+   - AI Swarm (parallel subtask decomposition as a workflow step)
+   - Durable, long-running execution (waits of days/weeks, retries, exactly-once)
+   - A fixed multi-step pipeline / agents chained in a defined order
+   IMPORTANT: scheduling/cron or a webhook trigger ALONE does NOT force a Superflow — single agents and managers can be scheduled too. The special nodes above are the test.
+
+3. INTERMEDIATE / Manager — several specialist agents coordinated by a manager that decides at runtime which to call and synthesizes. Pure reasoning/LLM work, NO special nodes. If it needs any special node, it is a Superflow instead.
+
+4. VOICE — spoken channel (per-minute). Enable on the agent handling the call.
+
+Always justify the cheapest pattern and NAME the capability that forces any escalation (e.g. "needs human approval -> Superflow"). A Superflow can contain single-agent and manager nodes (it is the superset).
+
+=== MERMAID DIAGRAM (draw each workload at its TRUE tier) ===
+- Clean professional text. NEVER use emojis.
+- Do NOT add colors or styling — no classDef, style, linkStyle, ":::class", or %%{init}%% directives. The app applies the Lyzr brand theme; node TYPE is conveyed by the label (e.g. "If: ...", "Wait for Approval", "HTTP: ...", "LLM: ...") and shape, not color.
+- ORIENTATION (match Lyzr Studio):
+  - SUPERFLOW → HORIZONTAL: start the diagram with 'graph LR'.
+  - SINGLE AGENT or MANAGER → VERTICAL: start with 'graph TD'.
+  - MIXTURE → 'graph LR' at top level; wrap each workload in a 'subgraph' and set 'direction LR' inside a Superflow subgraph, 'direction TB' inside a Single/Manager subgraph.
+- SINGLE AGENT: ONE agent node, with its Knowledge Base / tools shown as attached adjuncts (KB and Tool boxes pointing INTO the agent). Do NOT draw its internal steps (classify/draft/route) as separate sequential flow nodes — that misleads the viewer into thinking it's a multi-step pipeline (it's one run).
+- MANAGER: the manager node with its sub-agent nodes hanging off it (delegation).
+- SUPERFLOW: a real NODE GRAPH like the builder — Trigger --> nodes --> If/Switch branches / Loop / Wait for Approval --> end. Label node types (LLM, Code, If, HTTP, Wait for Approval, etc.).
+- EDGE LABELS: keep branch labels short and clear, e.g. A -->|Yes| B and A -->|No| C (or |high confidence| / |low confidence|). They render as dark text on a cream chip.`,
     input_schema: {
       type: "object" as const,
       properties: {
-        title: { type: "string", description: "Agent Workflow title" },
-        summary: { type: "string", description: "High-level summary of what the workflow does" },
-        complexity_profile: {
-          type: "string",
-          enum: ["LOW", "MEDIUM", "HIGH"],
-        },
-        architecture_pattern: {
-          type: "string",
-          enum: ["Single Agent", "Orchestrator", "Multi-Agent Chain"],
-        },
-        architecture_counts: {
-          type: "object",
-          properties: {
-            n_agents: { type: "number" },
-            n_kb: { type: "number" },
-            n_rai: { type: "number" },
-            n_tools: { type: "number" },
+        title: { type: "string", description: "Short title for the overall solution" },
+        summary: { type: "string", description: "1-2 sentence summary of the whole solution" },
+        workloads: {
+          type: "array",
+          description: "One entry per sub-use-case / workload, each assigned an orchestration tier.",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Name of this workload (e.g. 'Invoice intake pipeline', 'Data chat agent')" },
+              complexity: {
+                type: "string",
+                enum: ["simple", "intermediate", "complex", "voice"],
+                description: "simple=Single Agent, intermediate=Manager, complex=Superflow, voice=Voice agent",
+              },
+              reasoning: { type: "string", description: "1 sentence: why this tier — name the capability that forced it (or 'one task -> single agent')." },
+            },
+            required: ["name", "complexity", "reasoning"],
           },
-          required: ["n_agents", "n_kb", "n_rai", "n_tools"],
-        },
-        scenario_variables: {
-          type: "object",
-          properties: {
-            b_mem: { type: "number" },
-            b_kb: { type: "number" },
-            b_rai: { type: "number" },
-            b_api: { type: "number" },
-          },
-          required: ["b_mem", "b_kb", "b_rai", "b_api"],
         },
         mermaidCode: {
           type: "string",
-          description: "Mermaid.js flowchart code using graph TD format. NEVER use emojis. Clean professional text only.",
+          description: "Mermaid 'graph TD' code. Superflows rendered as node graphs. NEVER use emojis.",
         },
       },
-      required: [
-        "title", "summary", "complexity_profile", "architecture_pattern",
-        "architecture_counts", "scenario_variables", "mermaidCode",
-      ],
+      required: ["title", "summary", "workloads", "mermaidCode"],
     },
   },
   {
     name: "calculate_credits",
-    description: `Calculate Lyzr cost using the AGENT RUN model. This pricing is fully transparent and customer-facing.
-
-=== LYZR PRICING (PUBLIC, TRANSPARENT) ===
-
-Lyzr charges ONLY for agent runs. Nothing else gets billed - no platform fee, no LLM markup, no service fee, no infrastructure fee.
-
-Two deployment options:
-- Lyzr Cloud:       $0.08 per agent run  (fully managed, no compute overhead)
-- Lyzr VPC/On-Prem: $0.03 per agent run  (customer's own VPC, full data sovereignty)
-
-LLM costs are passed through SEPARATELY at provider rates. Customer pays OpenAI / Anthropic / Google directly.
-
-=== WHAT IS AN AGENT RUN ===
-
-An agent run = one invocation of an agent that performs a discrete reasoning task.
-One agent run = one billable unit, regardless of how much work happens inside it.
-
-INTERNAL NOTE FOR YOUR REASONING (do NOT enumerate these to the customer in chat or artifacts):
-inside one agent run, KB lookups, tool/API calls, sub-agent calls, memory operations, RAI
-guardrails and agent security policy checks are not separately billed. Use this to size runs
-correctly, but never write a sentence like "X, Y, Z are free inside an agent run" — the customer
-artifact already states "Lyzr charges only for agent runs" and that is the only line they need.
-
-=== HOW TO COUNT AGENT RUNS PER USE CASE ===
-
-CRITICAL MENTAL MODEL: The number a user gives you (e.g. "200 contracts/month" or "60,000
-invoices/year") is almost always the SUCCESSFUL FINAL OUTPUT at the bottom of a funnel.
-The real workload is bigger because:
-  (a) FUNNEL — to ship N successful outputs the system processes more candidates upstream
-      (rejections, reroutes, escalations, classification dead-ends).
-  (b) PER-STEP REWORK — each step rarely passes first time. Real workflows have compliance
-      checks, review loops, exception handling, and human-in-the-loop back-and-forth that
-      multiply runs at specific stages. THIS IS WHERE THE TO-AND-FRO LIVES — bake it into
-      the per-step iteration_multiplier, not into a separate aggregate adder.
-  (c) OPERATIONAL BUFFER — one outer safety margin for surge volume, edge cases, copilot
-      questions, and model retries. Keep this as a SINGLE clear number — do not fragment it.
-
-Treating use cases as flat deterministic pipelines under-counts runs by 3-10x. Be defensible.
-Procurement teams have seen real deployments — if your numbers look thin, they will assume
-you're sandbagging to win the deal and then bill a surprise change order. Don't do that.
-
-ALWAYS CHALLENGE THE STATED VOLUME. The number a customer first quotes ("50 contracts/week",
-"200 invoices/month", "4 reports/day") is almost always:
-  • One contract type / one team / one geography (not the whole portfolio)
-  • Just the items that reach the stage they happen to own
-  • Successful, finalized outputs — not what flows in upstream
-True enterprise volume across all teams, types, and stages is typically 3-10× the stated number.
-Surface this in funnel_rationale and bake the realistic multiplier into funnel_multiplier.
-
-Step 1: Map the workflow into discrete reasoning steps INCLUDING compliance/review/approval
-        gates that the user might omit. For invoice processing you typically have:
-        intake → extract → policy/PO check → compliance/duplicate check → approval routing →
-        post → confirm. Don't skip the validation/review steps.
-        Tag each step with a phase (discovery / validation / processing / review / delivery / monitoring).
-
-Step 2: For each step set:
-  - runs (base reasoning calls per unit on first pass through this step)
-  - iteration_multiplier (captures THE TO-AND-FRO at this stage)
-       1.0  = always passes first time (rare)
-       1.5  = ~50% need rework / second look (light workflows only)
-       2.0  = avg 2 passes (standard review loops)
-       3-4  = standard for regulated workflows (compliance objection-and-fix loops)
-       5-7  = heavy enterprise legal/financial review (multiple counsel/reviewer rounds)
-       8+   = exceptional, only if the customer described it
-  - reasoning (1 sentence justifying both — name the rework reason: "compliance flag rate ~30%
-    triggers re-extract + re-validate" / "approver kicks back ~40% for missing PO link" /
-    "counsel redline cycle averages 4 rounds before sign-off")
-  - effective_runs = runs × iteration_multiplier
-
-  Default iteration_multiplier by step type. The HIGHER end is the realistic anchor for any
-  regulated, legal, financial, or healthcare workflow — do NOT default to the bottom:
-     classification / routing      → 1.10 - 1.50   (re-classification when source is ambiguous)
-     extraction / parsing          → 2.0 - 4.0     (regulated legal/financial: 4-6, not 1-2)
-     validation against rules      → 3.0 - 5.0     (each failed clause/rule re-evaluated, escalated, re-checked)
-     judgment / review / scoring   → 2.0 - 4.0
-     drafting / generation         → 4.0 - 7.0     (redline iteration with reviewers — multi-round is the norm)
-     orchestration / planning      → 1.5 - 2.5     (re-plan when sub-agents return errors)
-     critic / approval gate        → 5.0 - 8.0     (2-3 reviewers × concern→fix→re-check loops)
-  For consumer-grade / non-regulated workflows you may use the lower end.
-
-Step 3: Apply the FUNNEL multiplier to volume.
-  funnel_multiplier ≥ 1, applied to user-stated unit_volume.
-  effective_unit_volume = unit_volume × funnel_multiplier
-  Use the defaults library below; explain in funnel_rationale.
-  For regulated/enterprise workflows the floor is 2.5×. Going below that without an explicit
-  customer statement ("we receive X and process Y") is sandbagging.
-
-Step 4: STEADY-STATE math.
-  base_runs_per_unit       = sum(step.runs)
-  effective_runs_per_unit  = sum(step.runs × step.iteration_multiplier)
-  steady_state_annual_runs = effective_unit_volume × effective_runs_per_unit
-
-Step 5: ONE OPERATIONAL BUFFER (single number, but procurement-defensible).
-  iteration_buffer_pct — single outer margin. PROCUREMENT-DEFENSIBLE ANCHOR IS 50%.
-    • 25-35% — light, well-instrumented, non-regulated workflows only
-    • 40-60% — DEFAULT for any regulated, enterprise, or first-deployment workflow.
-              Anchor at 50% unless you have a concrete reason to move.
-    • 60-80% — Year-1 of a regulated rollout where onboarding (playbook ingestion, corpus
-              indexing, UAT cycles, calibration) is bundled into ongoing rather than split out.
-
-  This single buffer covers, all together: continuous platform work (copilot conversations,
-  KB updates, cross-document intelligence, skill tuning, audit/compliance reporting — typically
-  15-25% of total runs at enterprise scale), ramp-up calibration in early months, surge volume,
-  novel inputs, model retries/timeouts, and exception handling.
-
-  In volume_breakdown_note you MUST name what the buffer covers — never present it as a magic
-  number. Example: "50% buffer covers ~20% continuous copilot/KB/audit ops, ~15% Year-1
-  calibration and exception handling, and ~15% surge/edge-case headroom."
-
-  total_annual_runs = steady_state_annual_runs × (1 + iteration_buffer_pct/100)
-
-  DO NOT emit separate top-level continuous_ops_runs / onboarding_runs / edge_buffer_runs
-  fields in the credit calculation — the single buffer above is the only adder at that level.
-  (Year-1 onboarding for regulated rollouts is handled separately as its own WORKLOAD ROW
-  in 'rows[]' per Step 5b — that's a different thing from a buffer line.)
-
-Step 5b: YEAR-1 ONBOARDING (regulated / enterprise rollouts only).
-  For any regulated workflow (legal, financial, healthcare, compliance) at enterprise scale,
-  Year 1 includes large one-time onboarding work that does NOT fit cleanly inside the
-  operational buffer:
-    • Playbook / rule encoding (5K-10K runs)
-    • Historical corpus indexing (3+ years of documents — 50K-100K runs)
-    • Library / pattern training (20K-30K runs)
-    • Tone / template calibration (10K-15K runs)
-    • UAT cycles with the business team (30K-50K runs)
-  Total typically 100K-200K one-time runs.
-
-  Surface this as an EXTRA workload row in 'rows[]' named "Year-1 Onboarding & Calibration
-  (one-time)" alongside backlog and ongoing. Do NOT bury it in the buffer for regulated
-  enterprise deals — procurement will demand to see it explicitly. For non-regulated or SMB
-  deals you may skip it.
-
-Step 6: PHASE BREAKDOWN.
-  Group runs_breakdown by phase and emit phase_breakdown[] with runs, pct_of_total, and a short
-  note. This makes the number procurement-defensible and enables modular adoption.
-
-=== DEFAULTS LIBRARY BY USE CASE CATEGORY ===
-
-Pick the closest match, set use_case_category, and use these as starting points (adjust per
-specifics). These are anchored to real enterprise deployments — do NOT default to lower numbers,
-and for regulated categories do not go below the lower bound without an explicit reason.
-
-| Category                                                   | funnel_mult | per-step iter (avg) | operational buffer |
-|------------------------------------------------------------|-------------|---------------------|--------------------|
-| Document processing — high-throughput, structured          | 1.5 - 2.5   | 1.5 - 2.0           | 30 - 45%           |
-| Document processing — judgment-heavy, regulated (legal,    |             |                     |                    |
-|   financial, healthcare contracts/records)                 | 2.5 - 4.0   | 3.0 - 5.0           | 40 - 60% (anchor 50%) |
-| Marketing campaigns — test-and-learn / creative            | 5.0 - 10.0  | 2.0 - 3.0           | 35 - 50%           |
-| Customer service triage / support                          | 1.2 - 1.6   | 1.2 - 1.6           | 30 - 45%           |
-| Decision workflows — regulated (CFO close, KYC, AML,       |             |                     |                    |
-|   underwriting, claims)                                    | 2.5 - 4.0   | 2.5 - 4.0           | 40 - 60% (anchor 50%) |
-| Real-time decisioning (next-best-action, fraud)            | 1.0 - 1.2   | 1.0 - 1.3           | 20 - 30%           |
-| Research / analyst workflows (multi-source synthesis)      | 3.0 - 5.0   | 2.0 - 3.5           | 40 - 55%           |
-| Code / engineering automation (review, refactor, tests)    | 2.0 - 4.0   | 2.5 - 4.0           | 35 - 50%           |
-| Sales workflows (lead qual, outreach, enrichment)          | 2.5 - 6.0   | 1.5 - 2.5           | 35 - 50%           |
-
-For any category labelled "regulated" the operational buffer is 40-60% with 50% as the
-procurement-defensible anchor — go to 60-80% only if Year-1 onboarding is bundled into the
-ongoing line rather than emitted as a separate row in 'rows[]'.
-
-If the user only gave one volume number, ASSUME it is the successful-output bottom-of-funnel
-AND likely scoped to one team / type / geography. Apply the category default funnel and EXPLAIN
-in funnel_rationale: "Customer stated 50 contracts/week — assumed bottom-of-funnel for one
-contract type. Applied 3.0× funnel to capture intake rejects (~25%), clarification rounds
-(~35%), iteration with counsel (~30%), and exception handling. Real upstream volume across
-all contract types and teams may be larger; recommend confirming with the legal ops lead."
-
-If they explicitly said "we receive X documents and process Y", set funnel_multiplier = X/Y
-and skip the default. Always state your assumption in funnel_rationale.
-
-=== QUICK CONVERSION EXAMPLES ===
-  Generate one document from a prompt = 1 run
-  Generate 50 variants in one structured-output call = 1 run
-  Score one document across 5 independent rubric dimensions = 5 runs
-  4 reviewers × 8 dimensions = 32 runs
-  100 synthetic agents reacting across 4 channels = 400 runs
-  One copilot turn = 1 run
-  Tool / DB call inside an agent run = 0 (free)
-
-=== COMMON MISTAKES TO AVOID ===
-1. Counting outputs instead of reasoning steps
-2. Treating tool / KB / sub-agent / memory work as separate billable runs (it's all part of
-   the parent agent run — but never enumerate this in customer-facing text)
-3. Forgetting the funnel (upstream volume widens — and stated volume is usually understated 3-10×)
-4. Anchoring the operational buffer too low (50% is the procurement-defensible floor for
-   regulated workflows; 25-35% is only OK for light, well-instrumented pipelines)
-5. Burying Year-1 onboarding (playbook ingestion, corpus indexing, UAT) inside the buffer for
-   regulated enterprise deals — procurement will demand to see it as its own line
-
-=== LLM COST ESTIMATION (PASS-THROUGH, SHOWN SEPARATELY) ===
-
-You MUST follow this 4-step framework. Do not just pick "GPT-4o for everything" — that is wasteful.
-
---- STEP A: Classify each agent in the architecture ---
-
-For every agent (planner, worker, classifier, extractor, etc.) determine:
-  • Task type: ROUTING/EXTRACTION (deterministic, narrow), CHAT/RAG (conversational), LONG-DOC (>20K input tokens), REASONING (multi-step planning, math, code), or FRONTIER (autonomous, high-stakes)
-  • Context size per call: <8K, 8-100K, 100K-1M
-  • Volume: high (>100K runs/yr), medium, low
-  • Quality bar: production-critical vs best-effort
-
---- STEP B: Pick the cheapest model that clears the quality bar ---
-
-Latest May 2026 provider rates (USD per 1M tokens, fully public, NO markup):
-
-| Agent Role                                          | Recommended Model         | Provider  | Input  | Output | Ctx   |
-|-----------------------------------------------------|---------------------------|-----------|--------|--------|-------|
-| Cheapest routing / classification / extraction      | GPT-5.4 Nano              | OpenAI    | 0.20   | 1.25   | 272K  |
-| Ultra-cheap workers (alt)                           | Gemini 3.1 Flash-Lite     | Google    | 0.25   | 1.50   | 1M    |
-| Budget reasoning (math, logic, structured thinking) | o4-mini                   | OpenAI    | 0.55   | 2.20   | 200K  |
-| Standard chat, RAG, customer support                | Gemini 3 Flash            | Google    | 0.50   | 3.00   | 1M    |
-| Structured extraction, strong instruction follow    | Claude Haiku 4.5          | Anthropic | 1.00   | 5.00   | 200K  |
-| Reasoning workhorse (best balance)                  | o3                        | OpenAI    | 2.00   | 8.00   | 200K  |
-| Long-context multimodal (≤200K input)               | Gemini 3.1 Pro            | Google    | 2.00   | 12.00  | 2M    |
-| Long-context multimodal (>200K input)               | Gemini 3.1 Pro            | Google    | 4.00   | 18.00  | 2M    |
-| Standard general agent (≤272K context)              | GPT-5.4                   | OpenAI    | 2.50   | 15.00  | 272K  |
-| GPT-5.4 long-context (>272K input)                  | GPT-5.4                   | OpenAI    | 5.00   | 22.50  | —     |
-| Production coding, high-quality RAG, critic         | Claude Sonnet 4.6         | Anthropic | 3.00   | 15.00  | 1M    |
-| Frontier autonomous coding / agentic loops          | Claude Opus 4.7           | Anthropic | 5.00   | 25.00  | 1M    |
-| Hardest 5% of reasoning problems (use sparingly)    | o3-pro                    | OpenAI    | 20.00  | 80.00  | 200K  |
-
---- STEP C: MIX models in multi-agent architectures ---
-
-Don't use one model everywhere. A typical multi-agent system looks like:
-  • Triage / router agent     → GPT-5.4 Nano or Gemini 3.1 Flash-Lite (cheap)
-  • Extraction / worker agents → Claude Haiku 4.5 or Gemini 3 Flash (mid-tier)
-  • RAG / Q&A agent           → Gemini 3 Flash or GPT-5.4 Nano
-  • Reasoning / validator     → o4-mini (cheap) or o3 (workhorse)
-  • Long-doc analyzer         → Gemini 3.1 Pro (2M context, multimodal)
-  • Orchestrator / planner    → GPT-5.4 or Claude Sonnet 4.6
-  • Critic / reviewer         → Claude Sonnet 4.6 (best instruction following)
-  • ONLY use Opus 4.7 / o3-pro when frontier reasoning truly needed (high stakes, autonomous)
-
---- STEP D: Estimate tokens per run by task type ---
-
-| Task type                              | Avg input tokens | Avg output tokens |
-|----------------------------------------|------------------|-------------------|
-| Routing / classification               | 600              | 150               |
-| Standard chat / RAG (with KB snippet)  | 2,000            | 500               |
-| Multi-step orchestration / planning    | 4,500            | 1,200             |
-| Long-doc analysis (legal/research)     | 10,000           | 1,500             |
-| Very long context (full case/codebase) | 50,000           | 2,000             |
-
-Adjust based on actual KB context size and conversational vs transactional nature.
-
---- STEP E: Build the detailed LLM step table (llm_steps) ---
-
-CORE PRINCIPLE: EVERY agent run consumes at least one LLM call. The sum of llm_steps[].annual_calls
-MUST equal total_annual_runs × (1 + llm_buffer_pct/100) within ±1%. If it doesn't, your math is wrong
-and the customer will spot it immediately.
-
-You MUST emit ONE row in llm_steps for EVERY step in runs_breakdown. (If a step legitimately uses
-two different models — e.g., cheap router + reasoner inside one agent run — emit one row per model
-and split runs_per_unit between them so they sum to the step's effective_runs.)
-
-Compute the OVERHEAD FACTOR once and reuse it for every row:
-
-    overhead_factor = 1 + iteration_buffer_pct / 100
-                    = total_annual_runs / steady_state_annual_runs
-
-(This is the SAME single buffer from the agent-run waterfall — typically 1.20–1.40.
-If you compute < 1.0 you've made an error.)
-
-For each LLM step row:
-  • step_name           → MUST exactly match the step_name in runs_breakdown
-  • action              → 1 sentence on what the LLM is doing in that step
-  • runs_per_unit       → the EFFECTIVE runs for this step per business unit
-                          = step.runs × step.iteration_multiplier
-                          (i.e. step.effective_runs from runs_breakdown — NOT the raw "runs" value)
-                          If two models split a step, the two rows' runs_per_unit must sum to step.effective_runs.
-  • model_name + provider → pick from the May 2026 lineup using STEPS A-C. Mix models — do NOT use one model everywhere.
-  • model_rationale     → 1 short sentence on why THIS model for THIS step
-  • input_tokens / output_tokens → average per LLM call for THAT step (use Step D table, adjusted for KB context)
-  • input_rate_per_1m / output_rate_per_1m → from the pricing table above
-  • cost_per_call       = (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000
-  • cost_per_unit       = cost_per_call × runs_per_unit
-  • annual_calls        = runs_per_unit × effective_unit_volume × overhead_factor × (1 + llm_buffer_pct/100)
-
-                          For MULTIPLE WORKLOADS (rows[] populated): replace effective_unit_volume with
-                          sum of effective_unit_volume across all rows (i.e. total effective volume
-                          processed across backlog + ongoing). The LLM table is a CONSOLIDATED view.
-
-  • annual_cost         = annual_calls × cost_per_call
-
-MANDATORY SANITY CHECKS before emitting:
-  1. sum(llm_steps[].annual_calls) ≈ total_annual_runs × (1 + llm_buffer_pct/100)   (within ±1%)
-  2. sum(row.runs_per_unit) ≈ effective_runs_per_unit (when one model per step) or = effective_runs_per_unit (when steps are split across models)
-  3. Every annual_calls value is ≥ unit_volume (because overhead_factor ≥ 1 and effective volume ≥ stated volume)
-  4. llm_per_unit_cost = sum of cost_per_unit (one-pass per-unit cost, no overhead factor — that's per-unit not annual)
-
-If a check fails, RECOMPUTE — do not ship a bad table.
-
-llm_buffer_pct: 15-30% (separate from agent-run buffers). LLM buffer accounts for retries, self-correction loops, multi-sample generation, and tool-use iterations WITHIN a single agent run. Keep this LOWER than before since funnel/iteration/onboarding/continuous-ops are now modeled explicitly in the volume waterfall.
-
-llm_per_unit_cost = sum of cost_per_unit across all llm_steps  (cost to process ONE business unit, no overhead)
-llm_annual_cost   = sum of annual_cost across all llm_steps    (this fully reconciles with the agent-run total)
-
-llm_breakdown (per-model rollup) is OPTIONAL — only fill it if it adds clarity, otherwise omit.
-
-=== VOLUME RULES ===
-
-unit_volume = annual volume of business units the user processes (NOT runs).
-
-For BACKLOG (one-time): use the exact backlog count as unit_volume. No buffer needed beyond iteration_buffer_pct.
-For ONGOING (monthly): unit_volume = monthly_volume × 12.
-For COMBINED: use the "rows" array to show BOTH workloads as separate rows.
-
-total_annual_runs = steady_state_annual_runs × (1 + iteration_buffer_pct/100)
-(see Steps 1-6 above for the full waterfall — funnel × per-step iteration × single outer buffer.)
-For regulated enterprise rollouts, Year-1 onboarding goes in its own 'rows[]' row, NOT as a
-separate top-level field.
-
-=== CALCULATION ===
-
-rate_per_run = 0.08 (cloud) OR 0.03 (vpc) - default to cloud unless user says otherwise.
-
-lyzr_annual_cost = total_annual_runs × rate_per_run
-llm_annual_cost  = sum of llm_steps[i].annual_cost  (each row = annual_calls × cost_per_call)
-total_annual_cost = lyzr_annual_cost + llm_annual_cost
-
-=== MULTIPLE WORKLOADS ===
-
-If user has multiple workloads (backlog, ongoing, Year-1 onboarding for regulated rollouts),
-populate "rows" array. For a regulated/enterprise legal, financial or healthcare workflow you
-should typically emit THREE rows in Year 1:
-  rows: [
-    { workload_name: "Backlog Migration (one-time)", runs_per_unit, volume, annual_runs, lyzr_cost, llm_cost, total_cost },
-    { workload_name: "Ongoing Processing", ... },
-    { workload_name: "Year-1 Onboarding & Calibration (one-time)", ... }   // playbook ingestion + corpus indexing + UAT, typically 100K-200K runs total
-  ]
-  combined_lyzr_total = sum of row lyzr_cost
-  combined_llm_total = sum of row llm_cost
-  combined_total = combined_lyzr_total + combined_llm_total
-  combined_note = brief explanation
-
-In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps table footer (sum of annual_cost) reconciles exactly with combined_llm_total. Use the same runs_per_unit assumption that applies across the consolidated workload (or the volume-weighted average if backlog vs ongoing differ).`,
+    description: `Provide the DESIGN for each workload. The server computes ALL costs deterministically from your design — DO NOT compute platform $ yourself. Your job is to supply accurate design inputs.
+
+=== HOW PRICING WORKS (so your inputs are right) ===
+
+Total Cost = Lyzr Platform Cost + LLM Cost.
+
+PLATFORM COST depends on two things only — number of runs x complexity tier:
+- A RUN = one execution request (one chat message, one pipeline fire, one schedule tick). A manager calling 5 sub-agents = 1 run. A Superflow with 12 nodes = 1 run. Scheduled daily for a year = 365 runs.
+- Tier price per run (server applies it):
+  - Simple (Single Agent): flat — $0.06 SaaS / $0.03 on-prem.
+  - Intermediate (Manager): by sub_agents_executed — 1-4 / 5-8 / >=9.
+  - Complex (Superflow): by nodes_executed — 1-10 / 11-20 / 21-30 / >30 (incremental). Loops x N, only the taken branch, retries, and AI-swarm spawns all COUNT as nodes executed. Nested superflows: list each one's node count.
+  - Voice: per minute.
+
+RUNTIME DRIVERS you must estimate (these set the band):
+- sub_agents_executed: for a Manager, how many sub-agents actually run per request (executed, not configured).
+- nodes_executed: for a Superflow, how many nodes fire on the path actually taken per run (count loops x iterations, only the branch taken, retries, swarm spawns).
+- execution_paths (band-straddling): if a Superflow's branches land in DIFFERENT node bands (e.g. a short auto-resolve path of 8 nodes vs a long human-review path of 14 nodes), DON'T average them into one nodes_executed — instead provide execution_paths = [{nodes_executed, probability}, ...] and the server blends the price by probability. Use plain nodes_executed only when every path is in the same band.
+- nested_superflow_node_counts: if a Superflow calls other Superflows, list each child's node count.
+- voice_minutes_per_run: for Voice.
+
+RUNS — estimate runs_per_period (ANNUAL) per workload from the user's volume:
+- Chat: 1 run per user message. Ongoing monthly volume x 12. Backlog: the one-time count.
+- Be realistic about the true funnel of work (rework that RE-TRIGGERS the whole workflow adds runs; rework that loops INSIDE one run raises nodes_executed, not runs).
+- Each workload has its OWN volume — split the user's stated usage across workloads and explain in runs_rationale.
+
+LLM COST (separate, pass-through, no markup) — provide llm_calls = the LLM-bearing executions in ONE run of the workload:
+- Single Agent: ~1 call/run for pure Q&A; ~2 calls/run if it uses a tool or KB (one call to decide/use the tool, one to finalize) — count realistically.
+- Manager: manager call + one per sub-agent executed.
+- Superflow: one per LLM / AI-Agent / AI-Swarm node executed (x loop iterations). Non-LLM nodes (Code, HTTP, If, Set, Approval) have NO llm_calls.
+- For each call give model (from the real Studio catalog), provider, input_tokens, output_tokens. Pick the CHEAPEST model that clears the quality bar; MIX models across nodes. The server looks up the rate.
+- RESEARCH / WEB-SEARCH NODES: if a node does live web research, news lookup, web search, or fetches up-to-date external information, it MUST use a research-capable model with built-in web access — Perplexity "sonar" (cheap) or "sonar-pro" (higher quality), or "sonar-reasoning-pro" / "sonar-deep-research" for heavier research. A plain chat model like gpt-4o-mini or gemini-2.5-flash CANNOT search the web on its own, so do NOT use it for the search/research step. (If the customer specifically wants Claude/GPT with web search, claude-sonnet-4-6 or gpt-5 with web search is acceptable; default to Perplexity Sonar for pure research.)
+- byo_model: true if the customer brings their own model (then LLM cost is $0 on the Lyzr bill).
+
+=== MODEL SELECTION BY TASK COMPLEXITY (match model power to each node's job) ===
+Cost matters — default to the CHEAPEST model that clears the node's quality bar, and MIX models across nodes within one workflow. ALWAYS prefer the LATEST version in a family. Use this ladder to pick:
+- TRIVIAL / high-volume (routing, classification, tagging, simple extraction, short canned replies): cheapest tier — gpt-5-nano, gpt-5.4-nano, gemini-2.5-flash-lite, claude-haiku-4-5, nova-micro.
+- GENERAL-PURPOSE (standard chat, Q&A, RAG answers, summaries, everyday drafting): use a GPT model — gpt-5.4-mini by default, gpt-5.4 or gpt-5.5 when a bit more capability helps. (Default general-purpose tasks to GPT.)
+- COMPLEX / HIGH-QUALITY (nuanced drafting, careful multi-field extraction, risk/quality analysis, coding): use Claude Sonnet — claude-sonnet-4-6 (gpt-5.5 is an alternative).
+- COMPLEX REASONING (hard multi-step planning, deep legal/financial reasoning, tricky trade-offs, high-stakes decisions): use Opus — claude-opus-4-8 (latest, priciest — use only where reasoning truly demands it); o3 or gpt-5.5 are reasoning alternatives.
+- RESEARCH / web search / news / "latest" info (REQUIRED for any search step — built-in web access): sonar (cheap), sonar-pro (quality), sonar-reasoning-pro / sonar-deep-research (heavy). Never use a plain chat model for the actual web-search step.
+- LONG-CONTEXT (very large documents): gemini-2.5-pro, gemini-3.1-pro-preview.
+Rule of thumb: don't put Opus on a node a cheap model handles (wastes money), and don't put a cheap model on a node that genuinely needs reasoning or quality (loses trust). Example mix in one Superflow: gpt-5.4-mini to classify -> sonar-pro to research -> claude-sonnet-4-6 to draft the hard part -> gpt-5.4-mini to format/log.
+
+Token estimates per call by task type: routing 600/150 · chat/RAG 2000/500 · planning 4500/1200 · long-doc 10000/1500 · very-long 50000/2000.
+
+Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_architecture_summary. The workload NAMES should match generate_architecture.`,
     input_schema: {
       type: "object" as const,
       properties: {
-        agent_architecture_summary: { type: "string", description: "1-2 sentence summary of the agent architecture" },
-
-        deployment: {
-          type: "string",
-          enum: ["cloud", "vpc"],
-          description: "Deployment option. Default to 'cloud' unless user specifies VPC/on-prem.",
-        },
-        rate_per_run: {
-          type: "number",
-          description: "0.08 for cloud, 0.03 for vpc",
-        },
-
-        workload_name: { type: "string", description: "Name of the workload (e.g., 'Invoice Processing')" },
-        unit_volume: { type: "number", description: "User-stated annual volume of successful business units (bottom-of-funnel output)" },
-
-        use_case_category: { type: "string", description: "Closest match from the defaults library (e.g., 'Document processing — judgment-heavy, regulated')" },
-        funnel_multiplier: { type: "number", description: "≥1. Ratio of upstream input volume to stated successful output volume. Use defaults library." },
-        funnel_rationale: { type: "string", description: "1-2 sentences on why this funnel multiplier (rejections, reroutes, escalations)" },
-        effective_unit_volume: { type: "number", description: "= unit_volume × funnel_multiplier" },
-
-        runs_per_unit: { type: "number", description: "DEPRECATED legacy field — set equal to effective_runs_per_unit" },
-        base_runs_per_unit: { type: "number", description: "Sum of step.runs across runs_breakdown (no iteration applied)" },
-        effective_runs_per_unit: { type: "number", description: "Sum of step.runs × step.iteration_multiplier across runs_breakdown" },
-
-        runs_breakdown: {
+        agent_architecture_summary: { type: "string", description: "1-2 sentence summary of the architecture being priced" },
+        deployment: { type: "string", enum: ["cloud", "vpc"], description: "cloud=SaaS, vpc=Customer VPC/On-Prem. Default cloud." },
+        workloads: {
           type: "array",
-          description: "Discrete reasoning steps. Each step MUST have an iteration_multiplier and effective_runs.",
+          description: "One entry per workload (match names from generate_architecture). Provide DESIGN inputs only; server computes costs.",
           items: {
             type: "object",
             properties: {
-              step_name: { type: "string", description: "Name of the reasoning step" },
-              phase: {
-                type: "string",
-                enum: ["discovery", "validation", "processing", "review", "delivery", "monitoring"],
-                description: "Workflow phase this step belongs to",
+              name: { type: "string" },
+              complexity: { type: "string", enum: ["simple", "intermediate", "complex", "voice"] },
+              reasoning: { type: "string", description: "Why this tier" },
+              sub_agents_executed: { type: "number", description: "Manager only: sub-agents executed per run" },
+              nodes_executed: { type: "number", description: "Superflow only: nodes executed on the path taken per run (loops x N, taken branch, retries, swarm spawns). Use this for the typical path when all branches land in the SAME node band." },
+              execution_paths: {
+                type: "array",
+                description: "Superflow only, OPTIONAL: use INSTEAD of nodes_executed when branches land in DIFFERENT node bands (e.g. a short 8-node auto path vs a long 14-node human-review path). List each path; the server blends the per-run price by probability. Omit when one band covers all paths.",
+                items: {
+                  type: "object",
+                  properties: {
+                    nodes_executed: { type: "number", description: "Nodes executed on this path" },
+                    probability: { type: "number", description: "Relative likelihood of this path (0-1; the server normalizes)" },
+                  },
+                  required: ["nodes_executed", "probability"],
+                },
               },
-              runs: { type: "number", description: "Base agent runs per unit at first attempt" },
-              iteration_multiplier: { type: "number", description: "≥1. Avg attempts per unit for this step (rework, revision loops). Use the per-step-type defaults from the prompt." },
-              effective_runs: { type: "number", description: "= runs × iteration_multiplier" },
-              reasoning: { type: "string", description: "1 sentence justifying both runs and iteration_multiplier for this step" },
+              nested_superflow_node_counts: { type: "array", items: { type: "number" }, description: "Superflow only: node count of each nested superflow invoked" },
+              voice_minutes_per_run: { type: "number", description: "Voice only: minutes per run" },
+              runs_per_period: { type: "number", description: "ANNUAL runs for this workload" },
+              runs_rationale: { type: "string", description: "How runs_per_period was derived (volume, frequency, funnel, split across workloads)" },
+              byo_model: { type: "boolean", description: "True if customer brings own model for this workload (LLM cost $0 on Lyzr bill)" },
+              llm_calls: {
+                type: "array",
+                description: "LLM-bearing executions in ONE run of this workload. Empty for non-LLM-only workloads.",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: { type: "string", description: "Which node/agent makes this call" },
+                    model: { type: "string", description: "Model name from the real Studio catalog" },
+                    provider: { type: "string" },
+                    input_tokens: { type: "number" },
+                    output_tokens: { type: "number" },
+                  },
+                  required: ["model", "input_tokens", "output_tokens"],
+                },
+              },
             },
-            required: ["step_name", "phase", "runs", "iteration_multiplier", "effective_runs", "reasoning"],
+            required: ["name", "complexity", "reasoning", "runs_per_period", "llm_calls"],
           },
         },
-
-        steady_state_annual_runs: { type: "number", description: "= effective_unit_volume × effective_runs_per_unit" },
-
-        iteration_buffer_pct: {
-          type: "number",
-          description: "Single outer operational buffer %. Procurement-defensible anchor: 50% for any regulated/enterprise/first-deployment workflow (range 40-60%). Use 25-35% only for light, well-instrumented, non-regulated pipelines. Use 60-80% if Year-1 calibration is bundled in. Covers continuous copilot/KB/audit ops (~15-25%), ramp-up calibration, surge volume, novel inputs, retries, and exception handling — name what it covers in volume_breakdown_note.",
-        },
-
-        total_annual_runs: {
-          type: "number",
-          description: "= steady_state_annual_runs × (1 + iteration_buffer_pct/100). One single buffer applied — no separate continuous-ops/onboarding/edge lines.",
-        },
-
-        phase_breakdown: {
-          type: "array",
-          description: "Per-phase rollup of total_annual_runs grouped by phase. Enables modular adoption discussions.",
-          items: {
-            type: "object",
-            properties: {
-              phase: { type: "string" },
-              runs: { type: "number" },
-              pct_of_total: { type: "number", description: "% of total_annual_runs in this phase, 0-100" },
-              note: { type: "string", description: "1 short sentence on what happens in this phase" },
-            },
-            required: ["phase", "runs", "pct_of_total"],
-          },
-        },
-        volume_breakdown_note: { type: "string", description: "1-2 sentence summary of the volume model assumptions for this estimate" },
-
-        lyzr_annual_cost: {
-          type: "number",
-          description: "= total_annual_runs × rate_per_run",
-        },
-
-        llm_steps: {
-          type: "array",
-          description: "DETAILED per-step LLM breakdown. ONE row per agent reasoning step in runs_breakdown. Each row picks the most suitable model for THAT step and shows tokens, rates, and cost.",
-          items: {
-            type: "object",
-            properties: {
-              step_name: { type: "string", description: "MUST match a step_name from runs_breakdown (e.g., 'Triage', 'Extract Fields', 'Validate')" },
-              action: { type: "string", description: "1 sentence describing what the LLM is doing in this step (e.g., 'Classify ticket intent and route', 'Extract structured invoice fields')" },
-              runs_per_unit: { type: "number", description: "EFFECTIVE LLM calls per business unit for this step = step.runs × step.iteration_multiplier (i.e. step.effective_runs from runs_breakdown). NOT the raw base runs. If a step is split across two models, the two rows' runs_per_unit must sum to step.effective_runs." },
-              model_name: { type: "string", description: "Latest May 2026 model name, e.g., 'GPT-5.4 Nano', 'GPT-5.4', 'o3', 'o4-mini', 'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Claude Opus 4.7', 'Gemini 3 Flash', 'Gemini 3.1 Pro', 'Gemini 3.1 Flash-Lite'" },
-              provider: { type: "string", description: "OpenAI | Anthropic | Google" },
-              model_rationale: { type: "string", description: "1 short sentence on why THIS model for THIS step (e.g., 'Cheap classification — Nano is enough', 'Long-context contract analysis needs 1M ctx')" },
-              input_tokens: { type: "number", description: "Average input tokens per LLM call for this step" },
-              output_tokens: { type: "number", description: "Average output tokens per LLM call for this step" },
-              input_rate_per_1m: { type: "number", description: "USD per 1M input tokens for the chosen model (provider rate, no markup)" },
-              output_rate_per_1m: { type: "number", description: "USD per 1M output tokens for the chosen model (provider rate, no markup)" },
-              cost_per_call: { type: "number", description: "= (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000" },
-              cost_per_unit: { type: "number", description: "= cost_per_call × runs_per_unit" },
-              annual_calls: { type: "number", description: "= runs_per_unit (effective) × effective_unit_volume × overhead_factor × (1 + llm_buffer_pct/100), where overhead_factor = total_annual_runs / steady_state_annual_runs. For multi-workload (rows[]), use sum of effective_unit_volume across rows. SANITY CHECK: sum across all llm_steps MUST ≈ total_annual_runs × (1 + llm_buffer_pct/100)." },
-              annual_cost: { type: "number", description: "= annual_calls × cost_per_call" },
-            },
-            required: [
-              "step_name", "action", "runs_per_unit", "model_name", "provider",
-              "model_rationale",
-              "input_tokens", "output_tokens", "input_rate_per_1m", "output_rate_per_1m",
-              "cost_per_call", "cost_per_unit", "annual_calls", "annual_cost",
-            ],
-          },
-        },
-        llm_buffer_pct: {
-          type: "number",
-          description: "Small within-run LLM buffer (15-25% typical). Accounts for retries, self-correction loops, and multi-sample generation INSIDE a single agent run. Keep low — the to-and-fro between steps is already in iteration_multiplier and the operational buffer.",
-        },
-        llm_per_unit_cost: { type: "number", description: "Sum of cost_per_unit across all llm_steps (LLM cost to process ONE business unit)" },
-        llm_breakdown: {
-          type: "array",
-          description: "OPTIONAL rollup per model (sum of llm_steps grouped by model_name). Provide if useful, otherwise omit.",
-          items: {
-            type: "object",
-            properties: {
-              model_name: { type: "string" },
-              provider: { type: "string" },
-              runs_using_model: { type: "number" },
-              avg_input_tokens: { type: "number" },
-              avg_output_tokens: { type: "number" },
-              input_rate_per_1m: { type: "number" },
-              output_rate_per_1m: { type: "number" },
-              annual_cost: { type: "number" },
-            },
-            required: [
-              "model_name", "provider", "runs_using_model", "avg_input_tokens",
-              "avg_output_tokens", "input_rate_per_1m", "output_rate_per_1m", "annual_cost",
-            ],
-          },
-        },
-        llm_annual_cost: { type: "number", description: "Sum of annual_cost across all llm_steps" },
-        llm_note: {
-          type: "string",
-          description: "e.g., 'Pass-through to providers at public rates. Customer billed directly.'",
-        },
-
-        total_annual_cost: {
-          type: "number",
-          description: "= lyzr_annual_cost + llm_annual_cost",
-        },
-
-        rows: {
-          type: "array",
-          description: "Use ONLY when there are multiple workloads (e.g., backlog + ongoing)",
-          items: {
-            type: "object",
-            properties: {
-              workload_name: { type: "string" },
-              runs_per_unit: { type: "number" },
-              volume: { type: "number" },
-              annual_runs: { type: "number" },
-              lyzr_cost: { type: "number" },
-              llm_cost: { type: "number" },
-              total_cost: { type: "number" },
-            },
-            required: ["workload_name", "runs_per_unit", "volume", "annual_runs", "lyzr_cost", "llm_cost", "total_cost"],
-          },
-        },
-        combined_lyzr_total: { type: "number" },
-        combined_llm_total: { type: "number" },
-        combined_total: { type: "number" },
-        combined_note: { type: "string" },
+        notes: { type: "string", description: "Any assumptions worth surfacing to the customer" },
       },
-      required: [
-        "agent_architecture_summary", "deployment", "rate_per_run",
-        "workload_name", "unit_volume",
-        "use_case_category", "funnel_multiplier", "funnel_rationale", "effective_unit_volume",
-        "base_runs_per_unit", "effective_runs_per_unit",
-        "runs_per_unit", "runs_breakdown",
-        "steady_state_annual_runs",
-        "iteration_buffer_pct",
-        "total_annual_runs",
-        "phase_breakdown",
-        "lyzr_annual_cost",
-        "llm_steps", "llm_buffer_pct", "llm_per_unit_cost", "llm_annual_cost",
-        "total_annual_cost",
-      ],
+      required: ["agent_architecture_summary", "deployment", "workloads"],
     },
   },
   {
@@ -617,29 +207,42 @@ In multi-workload mode, set unit_volume = sum of rows[].volume so the llm_steps 
   },
   {
     name: "calculate_roi",
-    description: `Calculate ROI comparing total AI cost (Lyzr agent runs + LLM pass-through) vs human labor.
+    description: `Provide the DESIGN INPUTS for an ROI comparison (AI cost vs human labor). The SERVER computes the comparison deterministically (yearly costs, residual human cost, net savings, %, payback, roi_percentage) and returns it — DO NOT compute savings/percentages yourself. After the result returns, quote ITS comparison numbers exactly in your chat summary.
 
-CRITICAL: Use ai_analysis.cost_per_unit = total_annual_cost / unit_volume from the credit calculation.
-This means cost_per_unit INCLUDES both the Lyzr agent run cost AND the LLM pass-through cost.
+Use ai_analysis.cost_per_unit = total_annual_cost (from the calculate_credits result) / annual business-unit volume. This INCLUDES both platform and LLM cost.
 
-Base country: USA. Savings should typically be 80-95%.
+VOLUME CONSISTENCY (critical): volume_estimates.units_per_year MUST equal the total annual runs of the primary business workload you already priced in calculate_credits (e.g. if that workload had runs_per_period = 200, then units_per_year = 200 and units_per_month = 200/12). Do NOT re-estimate or round it to a different number — the ROI volume and the credits volume must match exactly.
+
+Base country: USA. Savings typically 80-95%.
 
 Role Mapping (US Median 2024 + 1.3x Loaded):
-- Contract Analysis → Paralegal: $32/hr base → $41.60/hr loaded
-- Legal Document Review → Legal Assistant: $30/hr base → $39/hr loaded
-- Invoice Processing → AP Clerk: $25/hr base → $32.50/hr loaded
-- KYC/AML → Compliance Officer: $45/hr base → $58.50/hr loaded
-- Customer Support → CSR: $22/hr base → $28.60/hr loaded
-- Data Entry → Specialist: $20/hr base → $26/hr loaded
-- HR Queries → HR Coordinator: $27/hr base → $35.10/hr loaded
+- Contract Analysis -> Paralegal: $32/hr -> $41.60/hr
+- Legal Document Review -> Legal Assistant: $30/hr -> $39/hr
+- Invoice Processing -> AP Clerk: $25/hr -> $32.50/hr
+- KYC/AML -> Compliance Officer: $45/hr -> $58.50/hr
+- Customer Support -> CSR: $22/hr -> $28.60/hr
+- Data Entry -> Specialist: $20/hr -> $26/hr
+- HR Queries -> HR Coordinator: $27/hr -> $35.10/hr
 
-Human time per task (be realistic):
-- Ticket triage: 8-12 minutes
-- Invoice processing: 15-25 minutes
-- Document review: 20-40 minutes
-- Contract analysis: 45-90 minutes
+Human time per task: ticket triage 8-12 min · invoice 15-25 min · doc review 20-40 min · contract 45-90 min.
+Cost_Human = Volume x (Loaded_Rate / 60) x Minutes_Per_Task
 
-Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
+=== HUMAN-IN-THE-LOOP: DO NOT OVERSTATE SAVINGS ===
+If the architecture KEEPS a human in the loop (any Wait-for-Approval / review / escalation node), the AI does NOT replace 100% of the labor. Reflect the retained human work using the right one of TWO patterns:
+
+PATTERN A — mandatory approval/sign-off on EVERY run (e.g. a PM approves every PRD, a lawyer signs every contract):
+  - automation_rate = 0 (nothing is fully hands-off; every unit gets a human touch). This is CORRECT and expected — not a flaw.
+  - residual_human_minutes_per_unit = the SHORT review/approval time per unit (the quick sign-off on an AI-produced draft, typically 10-30% of the full manual time_per_task_minutes — the AI did the heavy lifting). Applied to every unit.
+
+PATTERN B — confidence-gated escalation (only a SUBSET reaches a human, e.g. low-confidence support tickets):
+  - automation_rate = the fraction auto-handled end-to-end (e.g. 0.7 if ~70% auto-resolve).
+  - residual_human_minutes_per_unit = (1 - automation_rate) x review_minutes_per_escalated_unit, amortized across ALL units.
+
+Fully autonomous (no human node anywhere): automation_rate = 1, residual_human_minutes_per_unit = 0.
+
+The server folds residual human cost into the AI-solution total so savings stay honest. Pick the pattern that matches the diagram; never claim 100% replacement when a human node exists.
+
+TIME SAVINGS must reflect the reduction in HUMAN effort, not AI compute latency. If a human still spends ~12 min reviewing each unit (vs 60 min manual), that is an 80% time saving, NOT 95%. Quote comparison.time_savings_percentage from the returned result — do not compute a higher number from the AI's processing speed.`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -660,10 +263,12 @@ Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
         ai_analysis: {
           type: "object",
           properties: {
-            cost_per_unit: { type: "number", description: "Total cost per unit including Lyzr agent runs + LLM pass-through" },
+            cost_per_unit: { type: "number", description: "total_annual_cost / annual unit volume (platform + LLM)" },
             time_per_task_seconds: { type: "number" },
+            automation_rate: { type: "number", description: "Fraction of units handled end-to-end with NO human touch (0-1). 1.0 only if the design is fully autonomous (no human node). < 1 if there is any HITL / approval / review / escalation node." },
+            residual_human_minutes_per_unit: { type: "number", description: "Avg human minutes still spent per unit after automation, amortized across ALL units = (1 - automation_rate) x review_minutes_per_escalated_unit. 0 if fully autonomous." },
           },
-          required: ["cost_per_unit", "time_per_task_seconds"],
+          required: ["cost_per_unit", "time_per_task_seconds", "automation_rate", "residual_human_minutes_per_unit"],
         },
         volume_estimates: {
           type: "object",
@@ -695,28 +300,17 @@ Cost_Human = Volume × (Loaded_Rate / 60) × Minutes_Per_Task`,
   },
   {
     name: "review_and_validate",
-    description: `Quality assurance review for the full estimate. Validate all artifacts against business logic and the agent run model.
+    description: `Quality-check all artifacts against the new complexity-tier pricing model.
 
-Pricing is fully TRANSPARENT in this model - you can refer to agent runs, the $0.08/$0.03 rates, and LLM pass-through directly. No confidentiality required.
+Checks:
+1. Orchestration: each workload is the CHEAPEST tier that does the job; any Manager/Superflow escalation names the capability that forced it. Superflow only when a special node is needed (approval, If/Switch/Loop/Filter, HTTP/Code/Parse, AI Swarm, durable waits, fixed pipeline) — NOT merely because of a schedule.
+2. Runtime bands: sub_agents_executed / nodes_executed are realistic (executed, not configured); loops/retries/swarm spawns counted in nodes_executed; nested superflows listed.
+3. Runs: runs_per_period realistic per workload; chat = 1 run/message; scheduled fires counted; rework that re-triggers adds runs (not nodes).
+4. LLM: llm_calls present for every LLM-bearing execution; models from the real catalog; cheapest-that-clears-the-bar; mixed across nodes; tokens reasonable. LLM tied to executions, not run count.
+5. Deployment correct (cloud/vpc). BYO flag correct.
+6. ROI: ai cost_per_unit = total_annual_cost / unit volume; savings plausible. HITL CONSISTENCY: if any workload has a human node (Wait-for-Approval / review / escalation / confidence gate to a person), automation_rate MUST be < 1 and residual_human_minutes_per_unit > 0 — flag as critical if the ROI claims 100% automation while the architecture shows a human node. Conversely a fully autonomous design must have automation_rate = 1.
 
-Validation checks:
-1. Architecture: Agent count matches workflow, KB/RAI/Tool flags reasonable
-2. Agent Runs: runs_per_unit (= effective_runs_per_unit) matches sum(step.runs × step.iteration_multiplier) across runs_breakdown
-3. Funnel: funnel_multiplier ≥ category floor (regulated legal/financial/healthcare/decision workflows: 2.5×). funnel_rationale must justify it concretely (intake rejects, clarification rounds, iteration loops, scope expansion across teams/types/geos).
-4. Per-step iteration multipliers reflect realistic enterprise rework — for regulated workflows: extraction 2-4, validation 3-5, drafting 4-7, approval gate 5-8. Flag any regulated step with iteration_multiplier < 2.0 unless reasoning explicitly justifies it.
-5. Operational buffer: 50% is the procurement-defensible anchor for any regulated/enterprise/first-deployment workflow (range 40-60%; 60-80% if Year-1 onboarding is bundled in). 25-35% is acceptable ONLY for light, well-instrumented, non-regulated pipelines. volume_breakdown_note must name what the buffer covers.
-6. Year-1 onboarding: for regulated enterprise rollouts (legal, financial, healthcare), check that rows[] includes a "Year-1 Onboarding & Calibration (one-time)" row in the 100K-200K range — flag if missing.
-7. LLM model selection: matches complexity (simple → small models, complex → larger models). Models mixed across steps, not one model everywhere.
-8. Token estimates: reasonable for the use case domain.
-9. Math: total_annual_runs = effective_unit_volume × effective_runs_per_unit × (1 + iteration_buffer_pct/100); lyzr_annual_cost = total_annual_runs × rate_per_run; sum(llm_steps[].annual_calls) ≈ total_annual_runs × (1 + llm_buffer_pct/100) within ±1%.
-10. ROI: ai_analysis.cost_per_unit equals total_annual_cost / unit_volume (Lyzr + LLM).
-11. Savings percentage realistic (80-95% typical).
-
-Write issues in clear business language. Since pricing is transparent you may reference agent runs, rates, and LLM costs directly.
-
-DECISION:
-- All checks pass → status: "approved", issues: []
-- Any failure → status: "needs_revision", issues: [...]`,
+DECISION: all pass -> "approved", issues:[]. Any failure -> "needs_revision" with issues.`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -741,66 +335,76 @@ DECISION:
   },
 ];
 
-const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that helps users estimate the cost of running AI agents on Lyzr.
+const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that estimates the cost of running AI agents on Lyzr using the COMPLEXITY-TIER pricing model. Be conversational but precise.
 
-## YOUR ROLE
-You provide precise, transparent cost estimates using the AGENT RUN pricing model. Be conversational but professional.
+## ========== PRICING MODEL ==========
 
-## ========== LYZR PRICING MODEL (PUBLIC, TRANSPARENT) ==========
+Total Cost = Lyzr Platform Cost + LLM Cost.
 
-Lyzr charges ONLY for AGENT RUNS. Nothing else. No platform fee, no LLM markup, no service fee.
+Lyzr Platform Cost depends on exactly two things: NUMBER OF RUNS x COMPLEXITY TIER.
+LLM Cost is pass-through to the model provider at public rates, NO markup (and $0 on the Lyzr bill if the customer brings their own model).
 
-Two deployment options - both priced per agent run:
-- Lyzr Cloud:       $0.08 per agent run  (fully managed)
-- Lyzr VPC/On-Prem: $0.03 per agent run  (customer's environment)
+### What is a RUN
+One run = one execution request — one invocation/trigger of a workload — regardless of how much happens inside it.
+- One chat message = 1 run. A manager calling 5 sub-agents for one request = 1 run. A Superflow with 12 nodes executed once = 1 run. Scheduled daily for a year = 365 runs. An HITL pause does not split a run.
+- Rework: re-triggering the WHOLE workflow = +1 run; looping/retrying INSIDE one execution = more nodes_executed (higher band), still 1 run.
 
-LLM costs are passed through SEPARATELY at provider rates (OpenAI, Anthropic, Google). Customer pays the provider directly. Lyzr adds NO markup.
+### Complexity tiers and rates (per run; SaaS / On-Prem)
+- Simple / Single Agent: $0.06 / $0.03 (flat).
+- Intermediate / Manager: by sub-agents executed — 1-4 $0.18/$0.09 · 5-8 $0.36/$0.18 · >=9 $0.54/$0.27.
+- Complex / Superflow: by nodes executed — 1-10 $0.30/$0.18 · 11-20 $0.60/$0.36 · 21-30 $0.90/$0.54 · >30 = 21-30 base + $0.02/$0.01 per node beyond 30. Nested superflows are summed.
+- Voice: $0.09 / $0.06 per minute.
+Features like Knowledge Base, tools, memory, guardrails run INSIDE a run and are NOT billed separately — they never change the tier.
 
-## WHAT IS AN AGENT RUN
+### Orchestration selection (the heart — decide per sub-use-case)
+DESIGN ALTITUDE = PRODUCTION-REALISTIC. First envision the COMPLETE solution a competent architect would actually ship (including implied supporting steps: retrieval, validation, confidence/escalation, human-in-the-loop, system-of-record logging, monitoring). THEN tier it. No sandbagging (don't shrink a real workflow to one agent to look cheap) and no padding (every component must earn its place). "Cheapest pattern that does the job" = does the REAL production job.
+Decompose the solution; pick the cheapest pattern that does each job well. Mixtures are normal.
+- SIMPLE/Single Agent: one task one agent can finish (KB/tools/memory/voice/scheduler/webhook don't change this). The common case.
+- COMPLEX/Superflow: a deterministic workflow needing any SPECIAL NODE — human approval, If/Switch/Loop/Filter, HTTP/Code/Parse-Extract, AI Swarm, durable waits, or a fixed multi-step pipeline. (A schedule/cron alone does NOT force a Superflow.)
+- INTERMEDIATE/Manager: several specialist agents coordinated by a manager at runtime; pure reasoning, no special nodes.
+- VOICE: spoken channel (per minute).
+Name the capability that forces any escalation.
 
-One agent run = one invocation of an agent that performs a discrete reasoning task. One agent run = one billable unit, regardless of how much work happens inside it.
+### Decomposition discipline (avoid the over-split / inconsistency bug)
+- Create a SEPARATE workload ONLY for a genuinely DIFFERENT job. An ongoing volume and a one-time BACKLOG of the SAME process are the SAME workload run more times — fold the backlog into that workload's runs_per_period (e.g. ongoing_annual + backlog). Do NOT spawn a separate "Backlog Reprocessing" superflow/architecture unless the backlog genuinely needs different processing.
+- KEEP EVERYTHING CONSISTENT: the workloads in generate_architecture, the subgraphs in the diagram, the workloads in calculate_credits, and your chat description must match exactly — same count, same names, same tiers. If you say "a single Superflow" in chat, the diagram must show exactly one Superflow.
 
-INTERNAL NOTE — DO NOT enumerate to the customer in chat or in artifacts: inside one agent run, KB lookups, tool/API calls, sub-agent calls, memory ops, RAI guardrails and agent security policy checks are not separately billed. Use this only to size runs correctly. Never write a sentence like "X, Y, Z are free inside an agent run" in any customer-visible surface — the artifact already says "Lyzr charges only for agent runs" and that is the only line the customer sees.
+### LLM cost
+Decoupled from run count — one run can have many LLM calls. Per run, count LLM-bearing executions (single agent ~1; manager = manager + each sub-agent; superflow = one per LLM/agent/swarm node executed). MATCH MODEL POWER TO THE TASK, always prefer the LATEST version, and mix models across nodes: trivial/high-volume steps -> cheapest (gpt-5-nano, gpt-5.4-nano, claude-haiku-4-5); general-purpose chat/RAG/summaries -> a GPT model (gpt-5.4-mini / gpt-5.4 / gpt-5.5); complex/high-quality work -> claude-sonnet-4-6; hard multi-step reasoning -> claude-opus-4-8 (sparingly); research/web-search -> Perplexity sonar / sonar-pro (never a plain chat model for the search itself). The server computes the cost from token estimates and the public rate.
 
-## TRANSPARENCY POLICY
+## ========== IMPORTANT: YOU DESIGN, THE SERVER COMPUTES ==========
+Do NOT do cost arithmetic yourself — for EITHER credits OR ROI. In calculate_credits you provide the DESIGN (workloads, tiers, runtime drivers, runs, llm_calls); in calculate_roi you provide the DESIGN inputs (per-unit costs, volume, automation_rate, residual minutes). The server computes all money deterministically and returns the totals/comparison. After each result returns, quote ITS numbers EXACTLY — never restate a savings figure, percentage, or payback you calculated in your head, because it will drift from the panel.
 
-This pricing is FULLY PUBLIC. You SHOULD openly explain:
-- The $0.08 Cloud / $0.03 VPC rate per agent run
-- How agent runs are counted (discrete reasoning steps)
-- That LLM cost is a pass-through to providers at public rates
-- The token estimates and which models you assume
+## RESTRICTIONS
+- NEVER use emojis anywhere.
+- NEVER show raw Mermaid code in chat (it renders in the artifact panel).
+- Ask only ONE questionnaire per conversation, then proceed to tools.
+- When a user message starts with "My selections:" — STOP asking, START calling tools.
+- Use clean markdown (bullets, tables).
+- NEVER narrate internal tool mechanics to the user — no "the server returned empty", "let me retry", "the workloads array wasn't formatted", tool names, or JSON shapes. If a tool call comes back empty or wrong, silently call it again with corrected input. The user only ever sees polished results and reasoning.
+- Do NOT write "~" before a number to mean "approximately" (it renders as strikethrough). Write "about" or "≈" instead (e.g. "about $7,956", not "~$7,956").
 
-Do NOT use any old internal rate card terminology like Cost_Inference, B_Mem, B_KB, PRICE_RETRIEVE_*, etc. Those concepts no longer apply.
+## MARKDOWN FORMATTING (renders as GitHub-flavored markdown — get this right)
+- A heading ('##' / '###') MUST start on its OWN line with a BLANK line before it. NEVER glue a heading onto the end of a sentence — write "...then price it.\n\n## Architecture & reasoning", NEVER "...then price it.## Architecture & reasoning".
+- Do NOT put filler narration on the same line as a heading. If you want a lead-in sentence, put it on its own line, then a blank line, then the heading.
+- Same for bullets and tables: blank line before the list/table starts.
 
-## OTHER RESTRICTIONS
-- NEVER use emojis in ANY response - text, diagrams, anywhere
-- NEVER show raw Mermaid code in chat - it renders in the artifact panel
-- NEVER ask a second questionnaire - only ONE per conversation, then proceed to tools
-- When user message starts with "My selections:" - STOP asking questions, START calling tools
-- Use clean markdown with proper bullet points and tables
-
-## CRITICAL: SEQUENTIAL TOOL EXECUTION
-Call tools ONE AT A TIME in this order:
-1. generate_architecture → STOP and wait
-2. calculate_credits → STOP and wait
-3. calculate_roi → STOP and wait
-4. review_and_validate → STOP and wait
-
-NEVER call multiple tools at once.
+## SEQUENTIAL TOOL EXECUTION (one at a time, in order)
+1. generate_architecture -> STOP and wait
+2. calculate_credits -> STOP and wait
+3. calculate_roi -> STOP and wait
+4. review_and_validate -> STOP and wait
+NEVER call multiple tools at once. If review returns needs_revision, fix and re-review (max 3 iterations).
 
 ## INTERACTION FLOW
 
-### STEP 1: Quick Assessment (4 questions, MUST include numeric volume)
-When user describes a use case, ALWAYS ask the questionnaire below. Volume numbers are MANDATORY — without them you cannot estimate cost. Tailor the unit name (tickets / invoices / contracts / documents / leads / chats / etc.) and the placeholder value to match the use case the user described.
-
-Supported question types:
-- "radio"  → \`options: [...]\` (required)
-- "number" → \`placeholder\` (suggested numeric example) and \`unit\` (e.g. "tickets/month") are required; \`helper\` is optional one-liner
+### STEP 1: Questionnaire (ask once)
+When the user describes a use case, ask the questionnaire below. Tailor the volume unit (tickets / invoices / contracts / messages / documents / leads / calls) to the use case. Volume is MANDATORY.
 
 \`\`\`json
 {
   "type": "questionnaire",
-  "intro": "Quick details so I can size the cost accurately:",
+  "intro": "A few details so I can size the cost accurately:",
   "questions": [
     {
       "id": "workload_type",
@@ -814,163 +418,49 @@ Supported question types:
       "type": "number",
       "placeholder": "10000",
       "unit": "<UNIT>/month",
-      "helper": "Replace <UNIT> with the actual unit (tickets, invoices, contracts, etc.)"
+      "helper": "Replace <UNIT> with the actual unit (tickets, invoices, messages, etc.)"
     },
     {
       "id": "backlog_volume",
       "question": "Total BACKLOG to process one-time (enter 0 if ongoing only)",
       "type": "number",
       "placeholder": "50000",
-      "unit": "<UNIT> total",
-      "helper": "Optional one-time migration / catch-up volume"
+      "unit": "<UNIT> total"
     },
     {
       "id": "deployment",
       "question": "Preferred deployment?",
       "type": "radio",
-      "options": ["Lyzr Cloud ($0.08/run, managed)", "Lyzr VPC / On-Prem ($0.03/run, data sovereignty)"]
+      "options": ["Lyzr SaaS (managed)", "Customer VPC / On-Prem"]
+    },
+    {
+      "id": "model_hosting",
+      "question": "Which LLM models will you use?",
+      "type": "radio",
+      "options": ["Lyzr-hosted models (pass-through pricing)", "Bring your own model (you pay the provider directly)"]
     }
   ]
 }
 \`\`\`
 
-Volume validation rules:
-- A "number" answer of 0 means "not applicable" for that workload type and is allowed ONLY when the workload_type radio excludes it.
-- If workload_type is "Ongoing" → ongoing_volume MUST be > 0; backlog_volume should be 0.
-- If workload_type is "One-time backlog" → backlog_volume MUST be > 0; ongoing_volume should be 0.
-- If workload_type is "Both" → BOTH must be > 0.
-- The questionnaire UI enforces > 0 — but if the user later sends contradictory selections, ask one short follow-up to resolve.
-
-Conversational vs transactional should be inferred from the use case description; do not waste a question on it unless genuinely ambiguous.
-
-### STEP 2: Analyze & Calculate
-Once user sends "My selections:", DO NOT ask more questions. Immediately call tools sequentially:
-1. generate_architecture - Design the agent architecture
-2. calculate_credits - Compute agent runs and total cost (Lyzr + LLM separately)
-3. calculate_roi - Compare against human labor cost
-4. review_and_validate - Quality check all artifacts
-
-### STEP 3: Review Iteration (MAX 3 ITERATIONS)
-After review, if status="needs_revision":
-- Revise the problematic artifact and re-call review_and_validate
-- MAX 3 revision iterations - then approve with note about remaining minor issues
-- Iteration count RESETS when user sends a new message
-
----
-
-## AGENT RUN COUNTING FRAMEWORK (procurement-defensible)
-
-CHALLENGE THE STATED VOLUME. The number a customer first quotes ("50 contracts/week", "200 invoices/month") is almost always one team / type / geography and only the items that successfully reach the stage they own. True enterprise volume is typically 3-10× the stated number. Surface this in funnel_rationale and bake the realistic multiplier into funnel_multiplier.
-
-WATERFALL (use this everywhere — no flat formulas):
-  effective_unit_volume    = unit_volume × funnel_multiplier
-  effective_runs_per_unit  = sum(step.runs × step.iteration_multiplier)
-  steady_state_annual_runs = effective_unit_volume × effective_runs_per_unit
-  total_annual_runs        = steady_state_annual_runs × (1 + iteration_buffer_pct/100)
-
-Per-step iteration multipliers — use the HIGHER end for any regulated/legal/financial/healthcare workflow (do not default to the bottom):
-  classification / routing      → 1.10 - 1.50
-  extraction / parsing          → 2.0 - 4.0   (regulated legal/financial: 4-6)
-  validation against rules      → 3.0 - 5.0
-  judgment / review / scoring   → 2.0 - 4.0
-  drafting / generation         → 4.0 - 7.0   (multi-round redline is the norm)
-  orchestration / planning      → 1.5 - 2.5
-  critic / approval gate        → 5.0 - 8.0   (2-3 reviewers × concern→fix→re-check)
-
-Operational buffer (single outer margin — name what it covers in volume_breakdown_note):
-  • 25-35%  — light, well-instrumented, non-regulated workflows only
-  • 40-60%  — DEFAULT for regulated, enterprise, or first-deployment. ANCHOR AT 50%.
-  • 60-80%  — Year-1 of regulated rollout if onboarding is bundled into ongoing rather than split out
-The buffer covers continuous copilot/KB/audit ops (~15-25%), ramp-up calibration, surge volume, novel inputs, model retries, and exception handling — all together.
-
-Year-1 onboarding for regulated/enterprise rollouts (legal, financial, healthcare): emit as its OWN row in \`rows[]\` named "Year-1 Onboarding & Calibration (one-time)" — typically 100K-200K runs covering playbook ingestion (5-10K), historical corpus indexing (50-100K), library training (20-30K), tone calibration (10-15K), UAT cycles (30-50K). Do NOT bury this inside the operational buffer for regulated enterprise deals.
-
-QUICK COUNTING EXAMPLES:
-- 1 document from a prompt = 1 run
-- 50 variants in one structured-output call = 1 run
-- Score 1 doc across 5 independent dimensions = 5 runs
-- 4 reviewers × 8 dimensions = 32 runs
-- 100 synthetic agents × 4 channels = 400 runs
-- 1 copilot turn = 1 run
-- Tool / KB call inside a run does not add a billable run (treat as 0 — but never say this to the customer)
-
-## COST FORMULAS (TRANSPARENT)
-
-unit_volume = annual business units the user processes (NOT runs)
-funnel_multiplier ≥ 1; effective_unit_volume = unit_volume × funnel_multiplier
-For each step: effective_runs = runs × iteration_multiplier
-effective_runs_per_unit  = sum(step.effective_runs)
-steady_state_annual_runs = effective_unit_volume × effective_runs_per_unit
-total_annual_runs        = steady_state_annual_runs × (1 + iteration_buffer_pct/100)
-
-rate_per_run = 0.08 (Cloud) or 0.03 (VPC)
-lyzr_annual_cost = total_annual_runs × rate_per_run
-
-LLM cost is computed PER STEP via llm_steps (canonical):
-  overhead_factor  = 1 + iteration_buffer_pct/100   (the SAME single buffer)
-  cost_per_call    = (input_tokens × input_rate_per_1m + output_tokens × output_rate_per_1m) / 1,000,000
-  cost_per_unit    = cost_per_call × runs_per_unit                  (runs_per_unit = step.effective_runs)
-  annual_calls     = runs_per_unit × effective_unit_volume × overhead_factor × (1 + llm_buffer_pct/100)
-  annual_cost      = annual_calls × cost_per_call
-  llm_per_unit_cost = sum of cost_per_unit across all llm_steps
-  llm_annual_cost   = sum of annual_cost across all llm_steps
-
-total_annual_cost = lyzr_annual_cost + llm_annual_cost
-
-## VOLUME RULES
-
-- BACKLOG (one-time): unit_volume = exact backlog count. NO ×12 annualization.
-- ONGOING (monthly): unit_volume = monthly_volume × 12.
-- COMBINED: use "rows" array — one row per workload (Backlog, Ongoing, and for regulated rollouts also Year-1 Onboarding).
-
-## LLM MODEL SELECTION FRAMEWORK (LATEST MAY 2026 RATES, PASS-THROUGH, NO MARKUP)
-
-Pick the cheapest model that clears each agent's quality bar. Mix models across agents — never use one model for everything.
-
-| Agent Role                                          | Recommended Model         | Provider  | Input  | Output | Ctx   |
-|-----------------------------------------------------|---------------------------|-----------|--------|--------|-------|
-| Cheapest routing / classification / extraction      | GPT-5.4 Nano              | OpenAI    | 0.20   | 1.25   | 272K  |
-| Ultra-cheap workers (alt)                           | Gemini 3.1 Flash-Lite     | Google    | 0.25   | 1.50   | 1M    |
-| Budget reasoning (math, logic, structured thinking) | o4-mini                   | OpenAI    | 0.55   | 2.20   | 200K  |
-| Standard chat, RAG, customer support                | Gemini 3 Flash            | Google    | 0.50   | 3.00   | 1M    |
-| Structured extraction, strong instruction follow    | Claude Haiku 4.5          | Anthropic | 1.00   | 5.00   | 200K  |
-| Reasoning workhorse (best balance)                  | o3                        | OpenAI    | 2.00   | 8.00   | 200K  |
-| Long-context multimodal (≤200K input)               | Gemini 3.1 Pro            | Google    | 2.00   | 12.00  | 2M    |
-| Long-context multimodal (>200K input)               | Gemini 3.1 Pro            | Google    | 4.00   | 18.00  | 2M    |
-| Standard general agent (≤272K context)              | GPT-5.4                   | OpenAI    | 2.50   | 15.00  | 272K  |
-| GPT-5.4 long-context (>272K input)                  | GPT-5.4                   | OpenAI    | 5.00   | 22.50  | —     |
-| Production coding, high-quality RAG, critic         | Claude Sonnet 4.6         | Anthropic | 3.00   | 15.00  | 1M    |
-| Frontier autonomous coding / agentic loops          | Claude Opus 4.7           | Anthropic | 5.00   | 25.00  | 1M    |
-| Hardest 5% of reasoning problems (use sparingly)    | o3-pro                    | OpenAI    | 20.00  | 80.00  | 200K  |
-
-Typical multi-agent mix: triage → GPT-5.4 Nano / Gemini 3.1 Flash-Lite • workers → Haiku 4.5 / Gemini 3 Flash • reasoning → o4-mini or o3 • long-doc → Gemini 3.1 Pro (2M ctx) • orchestrator → GPT-5.4 / Sonnet 4.6 • only use Opus 4.7 / o3-pro when frontier reasoning truly needed.
-
-Token estimates per run:
-- Routing / classification:                 600 in /   150 out
-- Standard chat / RAG with KB snippet:    2,000 in /   500 out
-- Multi-step orchestration / planning:    4,500 in / 1,200 out
-- Long-doc analysis (legal / research):  10,000 in / 1,500 out
-- Very long context (full case/codebase):50,000 in / 2,000 out
-
-## LLM_STEPS — DETAILED PER-STEP TABLE (REQUIRED, CANONICAL)
-
-You MUST emit ONE row in llm_steps for EVERY step in runs_breakdown. Per-step model selection (with rationale) is the customer-facing detail — do NOT collapse into vague aggregates.
-
-For each step provide: step_name (matches runs_breakdown), action, runs_per_unit, model_name, provider, model_rationale (REQUIRED — 1 sentence on why THIS model for THIS step), input_tokens, output_tokens, input_rate_per_1m, output_rate_per_1m, cost_per_call, cost_per_unit, annual_calls, annual_cost.
-
-llm_buffer_pct (15-25%): small within-run LLM buffer for retries, self-correction, multi-sample generation, and tool-use iterations INSIDE a single agent run. Keep this LOW — the funnel, per-step iteration_multiplier, and outer operational buffer already cover the to-and-fro between steps.
-
-MULTI-WORKLOAD (rows[] populated): the llm_steps table is computed for ONE consolidated unit_volume = sum of all rows[].volume so footer totals reconcile with combined_llm_total. Set unit_volume to that combined sum.
-
-llm_breakdown (per-model rollup) is OPTIONAL — only include if it adds clarity.
+### STEP 2: After "My selections:"
+Immediately call tools in order: generate_architecture -> calculate_credits -> calculate_roi -> review_and_validate.
+- Decompose into workloads per the rubric and allocate the stated volume across workloads (explain in runs_rationale).
+- Map deployment: "Lyzr SaaS" -> cloud; "Customer VPC / On-Prem" -> vpc.
+- Map model_hosting: "Bring your own model" -> byo_model: true on the workloads; else false.
 
 ## OUTPUT GUIDELINES
-
-- Be precise with numbers
-- Always show Lyzr cost and LLM cost SEPARATELY in your summary
-- Highlight the simplicity: one rate, no markup
-- Highlight savings vs human labor prominently
-- After all tools complete, give 1-2 sentence summary emphasizing total annual cost and ROI`;
+- RIGHT AFTER generate_architecture (before pricing), explain the ARCHITECTURE REASONING in chat in PLAIN, simple English — like you're explaining it to a smart non-technical business person, not an engineer. Use this structure:
+  - "Architecture & reasoning" heading.
+  - 1-2 sentences on what the job REALLY involves once you think it through — the steps a real version needs that the one-liner implies (e.g. "answering a ticket isn't just writing a reply — you first read it, figure out what it's about, look up the answer, and decide whether it's safe to send automatically or needs a human to check"). This is the "why" behind the design.
+  - Then each workload: name it, its tier, and WHY in everyday words — explain the capability that decided it in plain terms, not jargon. e.g. "Because some replies need a human to approve them before they go out, and the steps must run in a set order, this is a Superflow — a plain single agent can't pause for approval or call your ticketing system." For a Single Agent, say why one agent is enough.
+  - 1 short line on what you deliberately kept OUT to avoid over-building (when relevant), in plain terms.
+  Keep the SAME overall length as now — tight, a few short paragraphs/bullets. Goal: the user clearly understands the thinking in simple language, not just the result. Avoid heavy jargon; if you must use a term like "If/Else" or "webhook", briefly say what it does.
+- After all tools complete, give a 1-2 sentence cost summary: total annual cost split into Platform vs LLM, and the headline ROI.
+- Always present Platform cost and LLM cost separately. Highlight that pricing is just runs x complexity, with LLM passed through at provider rates.
+- Your chat description MUST match the diagram and the priced workloads exactly (same workloads, names, tiers, count).
+- When you quote the human hourly rate in chat, use the EXACT fully_loaded_rate you passed to calculate_roi (e.g. "$28.60/hr") — do NOT round it to a different integer than the unit-cost math implies.
+- ROI honesty: if the architecture has a human-in-the-loop node, state the auto-resolution rate and that the remaining units still need brief human review — do NOT claim you replace 100% of the manual labor.`;
 
 async function performWebSearch(query: string): Promise<string> {
   try {
@@ -978,7 +468,7 @@ async function performWebSearch(query: string): Promise<string> {
     const response = await fetch(searchUrl);
     const text = await response.text();
 
-    if (!text || text.trim() === '') {
+    if (!text || text.trim() === "") {
       return `Using standard Bureau of Labor Statistics wage data for US median rates.`;
     }
 
@@ -990,11 +480,14 @@ async function performWebSearch(query: string): Promise<string> {
     }
 
     if (data.Abstract) {
-      return `Search Result: ${data.Abstract} (Source: ${data.AbstractSource || 'DuckDuckGo'})`;
+      return `Search Result: ${data.Abstract} (Source: ${data.AbstractSource || "DuckDuckGo"})`;
     }
 
     if (data.RelatedTopics && data.RelatedTopics.length > 0) {
-      const topics = data.RelatedTopics.slice(0, 3).map((t: { Text?: string }) => t.Text).filter(Boolean).join('; ');
+      const topics = data.RelatedTopics.slice(0, 3)
+        .map((t: { Text?: string }) => t.Text)
+        .filter(Boolean)
+        .join("; ");
       if (topics) {
         return `Search Results: ${topics}`;
       }
@@ -1005,6 +498,105 @@ async function performWebSearch(query: string): Promise<string> {
     console.error("Web search error:", error);
     return `Using standard Bureau of Labor Statistics wage data for US median rates.`;
   }
+}
+
+/**
+ * Run the deterministic pricing engine over the model's calculate_credits DESIGN input and
+ * return the fully-costed credit-calculation artifact. The model never computes money.
+ */
+function buildCreditArtifact(toolInput: Record<string, unknown>) {
+  const deployment: Deployment = toolInput.deployment === "vpc" ? "vpc" : "cloud";
+  const rawWorkloads = Array.isArray(toolInput.workloads)
+    ? (toolInput.workloads as WorkloadInput[])
+    : [];
+  const totals = computeTotals(rawWorkloads, deployment);
+
+  // Merge design inputs (runtime drivers, runs_rationale) with engine-computed cost fields so the
+  // artifact carries both — useful for display and Phase-2 editing.
+  const workloads = rawWorkloads.map((w, i) => ({ ...w, ...totals.workloads[i] }));
+
+  return {
+    agent_architecture_summary:
+      typeof toolInput.agent_architecture_summary === "string"
+        ? toolInput.agent_architecture_summary
+        : "",
+    deployment,
+    workloads,
+    platform_annual_cost: totals.platform_annual_cost,
+    llm_annual_cost: totals.llm_annual_cost,
+    llm_annual_cost_external: totals.llm_annual_cost_external,
+    total_annual_cost: totals.total_annual_cost,
+    notes: typeof toolInput.notes === "string" ? toolInput.notes : undefined,
+  };
+}
+
+/**
+ * Deterministically compute the ROI comparison from the model's design inputs so the chat prose,
+ * the ROI panel, and the saved artifact can never disagree. The model supplies per-unit costs,
+ * volume, automation_rate and residual human minutes; the server does ALL the money math —
+ * including the residual human labor retained by any human-in-the-loop design.
+ */
+function buildRoiArtifact(
+  toolInput: Record<string, unknown>,
+  creditArtifact?: ReturnType<typeof buildCreditArtifact> | null
+) {
+  const human = (toolInput.human_analysis ?? {}) as Record<string, unknown>;
+  const ai = (toolInput.ai_analysis ?? {}) as Record<string, unknown>;
+  const vol = (toolInput.volume_estimates ?? {}) as Record<string, unknown>;
+
+  const num = (v: unknown, d = 0) => (typeof v === "number" && isFinite(v) ? v : d);
+
+  // VOLUME + AI COST come from the credits artifact when available, so ROI can never drift from
+  // the priced design. The business-unit volume = the runs of the primary (highest-volume)
+  // workload; the AI annual cost = the actual Lyzr platform + LLM bill we already computed.
+  const creditWorkloads = Array.isArray(creditArtifact?.workloads)
+    ? (creditArtifact!.workloads as Array<{ runs_per_period?: number }>)
+    : [];
+  const primaryRuns = creditWorkloads.reduce(
+    (max, w) => Math.max(max, num(w.runs_per_period)),
+    0
+  );
+
+  const modelUnitsPerMonth = num(vol.units_per_month);
+  const modelUnitsPerYear =
+    modelUnitsPerMonth > 0 ? modelUnitsPerMonth * 12 : num(vol.units_per_year);
+  const unitsPerYear = primaryRuns > 0 ? primaryRuns : modelUnitsPerYear;
+
+  const automationRate = Math.max(0, Math.min(1, num(ai.automation_rate, 1)));
+  const residualMinutes = Math.max(0, num(ai.residual_human_minutes_per_unit, 0));
+
+  // Authoritative AI platform+LLM annual cost from credits; fall back to the model's per-unit.
+  const aiAnnualCost =
+    creditArtifact && typeof creditArtifact.total_annual_cost === "number"
+      ? creditArtifact.total_annual_cost
+      : num(ai.cost_per_unit) * unitsPerYear;
+
+  const { comparison, aiCostPerUnit, unitsPerMonth: computedUnitsPerMonth, roiPercentage } =
+    computeRoiComparison({
+      unitsPerYear,
+      loadedRate: num(human.fully_loaded_rate),
+      humanCostPerUnit: num(human.cost_per_unit),
+      humanTimeMinutes: num(human.time_per_task_minutes),
+      aiAnnualCost,
+      aiTimeSeconds: num(ai.time_per_task_seconds),
+      automationRate,
+      residualMinutesPerUnit: residualMinutes,
+    });
+
+  return {
+    ...toolInput,
+    ai_analysis: {
+      ...ai,
+      // Override with credits-derived per-unit so the UI's (cost_per_unit x volume) reconstructs
+      // exactly the real Lyzr bill instead of the model's estimate.
+      cost_per_unit: aiCostPerUnit,
+      automation_rate: automationRate,
+      residual_human_minutes_per_unit: residualMinutes,
+    },
+    volume_estimates: { units_per_month: computedUnitsPerMonth, units_per_year: unitsPerYear },
+    comparison,
+    roi_percentage: roiPercentage,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -1031,6 +623,9 @@ export async function POST(request: NextRequest) {
           const MAX_ITERATIONS = 10;
           let iteration = 0;
           let currentMessages = [...conversationMessages];
+          // Remember the most recent credits artifact so calculate_roi can derive volume + AI cost
+          // from the actually-priced design (keeps ROI and credits perfectly consistent).
+          let lastCreditArtifact: ReturnType<typeof buildCreditArtifact> | null = null;
 
           while (iteration < MAX_ITERATIONS) {
             iteration++;
@@ -1042,7 +637,11 @@ export async function POST(request: NextRequest) {
 
             const response = anthropic.messages.stream({
               model: "claude-opus-4-7",
-              max_tokens: 8192,
+              // Generous ceiling: a long architecture-reasoning block followed by a large
+              // calculate_credits tool input (17-node Superflow with many llm_calls) was
+              // exceeding 8192 and truncating the tool-input JSON, which parsed to empty and
+              // forced an ugly retry. 16k leaves ample headroom.
+              max_tokens: 16384,
               system: systemPrompt,
               tools,
               tool_choice: { type: "auto" },
@@ -1062,24 +661,20 @@ export async function POST(request: NextRequest) {
                 if (event.content_block.type === "tool_use") {
                   if (!toolUseBlock) {
                     isProcessingTool = true;
-                    console.log(`[SSE] Sending tool_start for: ${event.content_block.name}`);
                     sendEvent("tool_start", { tool: event.content_block.name });
                     toolUseBlock = {
                       type: "tool_use",
                       id: event.content_block.id,
                       name: event.content_block.name,
                       input: {},
-                    };
+                    } as Anthropic.ToolUseBlock;
                     currentToolInput = "";
-                  } else {
-                    console.log(`[SSE] Ignoring additional tool: ${event.content_block.name}`);
                   }
                 }
               } else if (event.type === "content_block_stop") {
                 if (toolUseBlock && currentToolInput && isProcessingTool) {
                   try {
                     toolUseBlock.input = JSON.parse(currentToolInput);
-                    console.log(`[SSE] Parsed tool input for: ${toolUseBlock.name}`);
                   } catch (e) {
                     console.error(`[SSE] Failed to parse tool input:`, e);
                   }
@@ -1089,13 +684,12 @@ export async function POST(request: NextRequest) {
             }
 
             const finalResponse = await response.finalMessage();
-            console.log(`[SSE] Iteration ${iteration} complete. stop_reason: ${finalResponse.stop_reason}, has toolUseBlock: ${!!toolUseBlock}`);
 
             if (toolUseBlock && toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0) {
               const toolInput = toolUseBlock.input as Record<string, unknown>;
-              const hasValidInput = Object.values(toolInput).some(v => v !== undefined && v !== null && v !== '');
-
-              console.log(`[SSE] Tool: ${toolUseBlock.name}, hasValidInput: ${hasValidInput}, keys: ${Object.keys(toolInput).join(', ')}`);
+              const hasValidInput = Object.values(toolInput).some(
+                (v) => v !== undefined && v !== null && v !== ""
+              );
 
               if (hasValidInput) {
                 let toolResult: string;
@@ -1104,8 +698,26 @@ export async function POST(request: NextRequest) {
                   const query = toolInput.query as string;
                   toolResult = await performWebSearch(query);
                   sendEvent("tool_result", { tool: toolUseBlock.name, data: { result: toolResult } });
+                } else if (toolUseBlock.name === "calculate_credits") {
+                  // Deterministic engine computes all costs from the model's design.
+                  const artifact = buildCreditArtifact(toolInput);
+                  if (!artifact.workloads || artifact.workloads.length === 0) {
+                    // Malformed/empty design — DON'T surface a broken artifact to the UI. Tell the
+                    // model to silently retry (the prompt forbids narrating this to the user).
+                    toolResult =
+                      "RETRY_SILENTLY: the workloads array was empty or malformed. Re-call calculate_credits with the complete workloads array. Do NOT mention this retry or any error to the user.";
+                  } else {
+                    lastCreditArtifact = artifact;
+                    sendEvent("tool_result", { tool: toolUseBlock.name, data: artifact });
+                    toolResult = JSON.stringify(artifact);
+                  }
+                } else if (toolUseBlock.name === "calculate_roi") {
+                  // Deterministic ROI (incl. residual human cost) so chat prose and panel agree.
+                  // Volume + AI cost derive from the credits artifact for perfect consistency.
+                  const artifact = buildRoiArtifact(toolInput, lastCreditArtifact);
+                  sendEvent("tool_result", { tool: toolUseBlock.name, data: artifact });
+                  toolResult = JSON.stringify(artifact);
                 } else {
-                  console.log(`[SSE] Sending tool_result for ${toolUseBlock.name}`);
                   sendEvent("tool_result", { tool: toolUseBlock.name, data: toolInput });
                   toolResult = JSON.stringify(toolInput);
                 }
@@ -1121,11 +733,13 @@ export async function POST(request: NextRequest) {
                   { role: "assistant" as const, content: contentBlocks },
                   {
                     role: "user" as const,
-                    content: [{
-                      type: "tool_result" as const,
-                      tool_use_id: toolUseBlock.id,
-                      content: toolResult,
-                    }],
+                    content: [
+                      {
+                        type: "tool_result" as const,
+                        tool_use_id: toolUseBlock.id,
+                        content: toolResult,
+                      },
+                    ],
                   },
                 ];
 
@@ -1134,7 +748,6 @@ export async function POST(request: NextRequest) {
             }
 
             if (finalResponse.stop_reason === "end_turn" || !toolUseBlock) {
-              console.log(`[SSE] Ending loop - no more tools to call`);
               break;
             }
           }
@@ -1158,16 +771,13 @@ export async function POST(request: NextRequest) {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Connection": "keep-alive",
+        Connection: "keep-alive",
         "X-Accel-Buffering": "no",
         "Transfer-Encoding": "chunked",
       },
     });
   } catch (error) {
     console.error("Chat API error:", error);
-    return Response.json(
-      { error: "Failed to process chat request" },
-      { status: 500 }
-    );
+    return Response.json({ error: "Failed to process chat request" }, { status: 500 });
   }
 }

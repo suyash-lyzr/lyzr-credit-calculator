@@ -95,17 +95,20 @@ export function LandingPage({
           </form>
 
           <div className="mt-6 flex flex-wrap justify-center gap-2 max-w-2xl mx-auto">
-            <ExampleChip 
-              text="Customer support ticket triage" 
-              onClick={() => setInput("I want to automate customer support ticket triage for about 500 tickets per day")} 
+            {/* Superflow */}
+            <ExampleChip
+              text="Customer support ticket triage"
+              onClick={() => setInput("I want to handle our customer support tickets automatically - read each ticket, figure out what it's about and how urgent it is, answer the easy ones, and pass the tricky ones to a support agent")}
             />
-            <ExampleChip 
-              text="Invoice processing" 
-              onClick={() => setInput("Help me calculate costs for automating invoice processing with approval workflow")} 
+            {/* Superflow */}
+            <ExampleChip
+              text="Invoice processing"
+              onClick={() => setInput("I want to automate invoice processing - read the details off each invoice, check them against our purchase orders, get someone to approve it, and then add it to our accounting system")}
             />
-            <ExampleChip 
-              text="Contract analysis" 
-              onClick={() => setInput("I need to analyze legal contracts and extract key terms - about 50 contracts per week")} 
+            {/* Mixture — Single Agent + Manager + Superflow in one app */}
+            <ExampleChip
+              text="Recruiting assistant"
+              onClick={() => setInput("I want a recruiting assistant that can chat with candidates and answer their questions, automatically screen and score incoming resumes and send the good ones to a recruiter to approve, and rate each candidate on their skills, experience and culture fit")}
             />
           </div>
         </div>

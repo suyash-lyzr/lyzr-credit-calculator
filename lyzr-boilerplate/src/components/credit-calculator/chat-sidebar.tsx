@@ -16,11 +16,27 @@ import {
   SidebarGroupContent,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatSession } from "@/lib/types";
 import Image from "next/image";
 
 const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
+
+// Full title for the hover tooltip — derived from the first user message so older sessions
+// (whose stored titles were hard-sliced) also show their real text.
+function fullTitle(session: ChatSession): string {
+  const firstUser = session.messages.find((m) => m.role === "user");
+  if (firstUser) return firstUser.content.split("\n")[0].trim();
+  return (session.title || "New Conversation").replace(/\.{3,}$/, "");
+}
+
+// The sidebar is a fixed narrow column, so we truncate the string itself: a few starting words,
+// then "…" — guaranteed to fit within the width and always show the ellipsis, leaving room for
+// the hover delete icon on the right.
+function displayTitle(session: ChatSession): string {
+  const full = fullTitle(session);
+  const MAX = 26;
+  return full.length > MAX ? `${full.slice(0, MAX).trimEnd()}…` : full;
+}
 
 interface ChatSidebarProps extends React.ComponentProps<typeof Sidebar> {
   sessions: ChatSession[];
@@ -70,7 +86,7 @@ export function ChatSidebar({
         <SidebarGroup>
           <SidebarGroupLabel>Chat History</SidebarGroupLabel>
           <SidebarGroupContent>
-            <ScrollArea className="h-[calc(100vh-260px)]">
+            <div className="h-[calc(100vh-260px)] overflow-y-auto overflow-x-hidden">
               <SidebarMenu>
                 {sessions.length === 0 ? (
                   <div className="px-4 py-8 text-center text-sm text-muted-foreground">
@@ -84,7 +100,9 @@ export function ChatSidebar({
                         onClick={() => onSelectSession(session.id)}
                       >
                         <IconMessage className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{session.title}</span>
+                        <span className="truncate min-w-0 flex-1" title={fullTitle(session)}>
+                          {displayTitle(session)}
+                        </span>
                       </SidebarMenuButton>
                       <SidebarMenuAction
                         onClick={(e) => {
@@ -92,7 +110,9 @@ export function ChatSidebar({
                           onDeleteSession(session.id);
                         }}
                         showOnHover
-                        className="text-muted-foreground hover:text-destructive"
+                        title="Delete conversation"
+                        aria-label="Delete conversation"
+                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       >
                         <IconTrash className="h-4 w-4" />
                       </SidebarMenuAction>
@@ -100,7 +120,7 @@ export function ChatSidebar({
                   ))
                 )}
               </SidebarMenu>
-            </ScrollArea>
+            </div>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

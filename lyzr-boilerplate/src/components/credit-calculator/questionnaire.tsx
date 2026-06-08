@@ -35,6 +35,33 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
   const [responses, setResponses] = React.useState<Record<string, string | string[]>>(submittedResponses || {});
   const isSubmitted = !!submittedResponses;
 
+  // On-prem / VPC deployments are always bring-your-own-model — Lyzr doesn't host models there.
+  // Detect the deployment + model questions by their option text (the LLM generates these, so we
+  // can't rely on a fixed id/order), then hide the "Lyzr-hosted" option whenever on-prem is chosen.
+  const deploymentQuestion = data.questions.find(
+    (q) => q.type === "radio" && (q.options ?? []).some((o) => /on-?prem|\bVPC\b/i.test(o))
+  );
+  const deploymentValue = deploymentQuestion ? (responses[deploymentQuestion.id] as string | undefined) : undefined;
+  const isOnPrem = !!deploymentValue && /on-?prem|\bVPC\b/i.test(deploymentValue);
+
+  const modelQuestion = data.questions.find(
+    (q) => q.type === "radio" && (q.options ?? []).some((o) => /bring your own/i.test(o))
+  );
+  const byoOption = modelQuestion?.options?.find((o) => /bring your own/i.test(o));
+
+  const isHiddenOption = (questionId: string, option: string) =>
+    isOnPrem && questionId === modelQuestion?.id && /lyzr-?hosted/i.test(option);
+
+  // When the user switches to on-prem, force the model answer to BYO (the only remaining option) so
+  // a previously-selected "Lyzr-hosted" choice doesn't silently persist while hidden.
+  React.useEffect(() => {
+    if (isSubmitted || !isOnPrem || !modelQuestion || !byoOption) return;
+    const current = responses[modelQuestion.id] as string | undefined;
+    if (current !== byoOption) {
+      setResponses((prev) => ({ ...prev, [modelQuestion.id]: byoOption }));
+    }
+  }, [isOnPrem, isSubmitted, modelQuestion, byoOption, responses]);
+
   const handleRadioChange = (questionId: string, value: string) => {
     if (isSubmitted) return;
     setResponses((prev) => ({ ...prev, [questionId]: value }));
@@ -124,6 +151,7 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
               {(question.options ?? []).map((option) => {
                 const isSelected = responses[question.id] === option;
                 if (isSubmitted && !isSelected) return null;
+                if (isHiddenOption(question.id, option)) return null;
                 return (
                   <label
                     key={option}

@@ -5,7 +5,11 @@ import { IconLoader2, IconZoomIn, IconZoomOut, IconFocus2, IconMaximize, IconX }
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArchitectureData } from "@/lib/types";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import {
+  TransformWrapper,
+  TransformComponent,
+  type ReactZoomPanPinchRef,
+} from "react-zoom-pan-pinch";
 import mermaid from "mermaid";
 import { createPortal } from "react-dom";
 
@@ -14,22 +18,198 @@ interface ArchitectureDiagramProps {
   isLoading: boolean;
 }
 
-function DiagramModal({ svgContent, title, summary, onClose }: { svgContent: string; title: string; summary: string; onClose: () => void }) {
+/**
+ * A self-fitting, smoothly pan/zoom-able canvas for a rendered Mermaid SVG.
+ *
+ * The injected SVG keeps its small intrinsic size, so we read its viewBox, give it explicit
+ * pixel dimensions, then compute a scale that fits it into the wrapper and center it. We refit
+ * on container/window resize and whenever the diagram changes, so it's always fully visible
+ * without manual zooming — in both the inline panel and the fullscreen modal.
+ */
+function DiagramCanvas({
+  svgContent,
+  padding = 0.06,
+  minScale = 0.05,
+  maxScale = 8,
+}: {
+  svgContent: string;
+  padding?: number;
+  minScale?: number;
+  maxScale?: number;
+}) {
+  const apiRef = React.useRef<ReactZoomPanPinchRef | null>(null);
+  const viewportRef = React.useRef<HTMLDivElement>(null);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  const natSizeRef = React.useRef<{ w: number; h: number } | null>(null);
+
+  // Normalize the injected SVG to a fixed pixel size taken from its viewBox so the fit math
+  // and the zoom transform are exact.
+  const measureSvg = React.useCallback(() => {
+    const svg = contentRef.current?.querySelector("svg");
+    if (!svg) return null;
+    let w = 0;
+    let h = 0;
+    const vb = svg.getAttribute("viewBox");
+    if (vb) {
+      const parts = vb.split(/[\s,]+/).map(Number);
+      w = parts[2];
+      h = parts[3];
+    }
+    if (!w || !h) {
+      const bbox = (svg as SVGSVGElement).getBBox?.();
+      if (bbox) {
+        w = bbox.width;
+        h = bbox.height;
+      }
+    }
+    if (!w || !h) return null;
+    svg.style.maxWidth = "none";
+    svg.style.maxHeight = "none";
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+    svg.style.width = `${w}px`;
+    svg.style.height = `${h}px`;
+    natSizeRef.current = { w, h };
+    return { w, h };
+  }, []);
+
+  const fitToView = React.useCallback(
+    (animationTime = 0) => {
+      const api = apiRef.current;
+      const viewport = viewportRef.current;
+      if (!api || !viewport) return;
+      const nat = natSizeRef.current ?? measureSvg();
+      if (!nat) return;
+      const cw = viewport.clientWidth;
+      const ch = viewport.clientHeight;
+      if (!cw || !ch) return;
+      const scale = Math.min(cw / nat.w, ch / nat.h) * (1 - padding);
+      const clamped = Math.max(minScale, Math.min(maxScale, scale));
+      const x = (cw - nat.w * clamped) / 2;
+      const y = (ch - nat.h * clamped) / 2;
+      api.setTransform(x, y, clamped, animationTime);
+    },
+    [measureSvg, padding, minScale, maxScale]
+  );
+
+  // Refit whenever the diagram content changes (measure first, then fit on next frame so the
+  // browser has laid out the new SVG).
+  React.useEffect(() => {
+    natSizeRef.current = null;
+    const id = requestAnimationFrame(() => {
+      measureSvg();
+      requestAnimationFrame(() => fitToView(0));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [svgContent, measureSvg, fitToView]);
+
+  // Refit on container/window resize.
+  React.useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === "undefined") return;
+    let raf = 0;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => fitToView(0));
+    });
+    ro.observe(viewport);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [fitToView]);
+
+  return (
+    <div ref={viewportRef} className="relative h-full w-full overflow-hidden">
+      <TransformWrapper
+        ref={apiRef}
+        minScale={minScale}
+        maxScale={maxScale}
+        initialScale={1}
+        limitToBounds={false}
+        centerZoomedOut={false}
+        wheel={{ step: 0.12, smoothStep: 0.005 }}
+        doubleClick={{ mode: "zoomIn", step: 0.7, animationTime: 200 }}
+        panning={{ velocityDisabled: false }}
+        onInit={() => fitToView(0)}
+      >
+        {({ zoomIn, zoomOut }) => (
+          <>
+            <div className="absolute top-2 right-2 z-10 flex gap-1">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
+                onClick={() => zoomIn(0.3)}
+                title="Zoom In"
+              >
+                <IconZoomIn className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
+                onClick={() => zoomOut(0.3)}
+                title="Zoom Out"
+              >
+                <IconZoomOut className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
+                onClick={() => fitToView(250)}
+                title="Fit to screen"
+              >
+                <IconFocus2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <TransformComponent
+              wrapperStyle={{ width: "100%", height: "100%" }}
+              contentStyle={{ width: "max-content", height: "max-content" }}
+            >
+              <div
+                ref={contentRef}
+                className="cursor-grab active:cursor-grabbing"
+                dangerouslySetInnerHTML={{ __html: svgContent }}
+              />
+            </TransformComponent>
+            <div className="absolute bottom-2 left-2 text-[10px] text-muted-foreground bg-white/80 px-2 py-1 rounded">
+              Drag to pan • Scroll to zoom • Double-click to zoom in
+            </div>
+          </>
+        )}
+      </TransformWrapper>
+    </div>
+  );
+}
+
+function DiagramModal({
+  svgContent,
+  title,
+  summary,
+  onClose,
+}: {
+  svgContent: string;
+  title: string;
+  summary: string;
+  onClose: () => void;
+}) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
+    document.addEventListener("keydown", handleEscape);
+    document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = "";
     };
   }, [onClose]);
 
   return createPortal(
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
-      <div 
+      <div
         className="bg-white rounded-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -42,65 +222,8 @@ function DiagramModal({ svgContent, title, summary, onClose }: { svgContent: str
             <IconX className="h-5 w-5" />
           </Button>
         </div>
-        <div className="flex-1 relative overflow-hidden">
-          <TransformWrapper
-            initialScale={1}
-            minScale={0.3}
-            maxScale={5}
-            centerOnInit={true}
-            wheel={{ step: 0.1 }}
-            panning={{ disabled: false }}
-            limitToBounds={false}
-          >
-            {({ zoomIn, zoomOut, resetTransform }) => (
-              <>
-                <div className="absolute top-4 right-4 z-10 flex gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="bg-white/90 hover:bg-white shadow-md"
-                    onClick={() => zoomIn()}
-                  >
-                    <IconZoomIn className="h-4 w-4 mr-1" /> Zoom In
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="bg-white/90 hover:bg-white shadow-md"
-                    onClick={() => zoomOut()}
-                  >
-                    <IconZoomOut className="h-4 w-4 mr-1" /> Zoom Out
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="bg-white/90 hover:bg-white shadow-md"
-                    onClick={() => resetTransform()}
-                  >
-                    <IconFocus2 className="h-4 w-4 mr-1" /> Reset
-                  </Button>
-                </div>
-                <TransformComponent
-                  wrapperStyle={{ width: "100%", height: "100%" }}
-                  contentStyle={{
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <div
-                    className="[&_svg]:max-w-none [&_svg]:max-h-none cursor-grab active:cursor-grabbing p-8"
-                    dangerouslySetInnerHTML={{ __html: svgContent }}
-                  />
-                </TransformComponent>
-                <div className="absolute bottom-4 left-4 text-sm text-muted-foreground bg-white/90 px-3 py-2 rounded-lg shadow">
-                  Drag to pan | Scroll to zoom | Press Escape to close
-                </div>
-              </>
-            )}
-          </TransformWrapper>
+        <div className="flex-1 relative overflow-hidden bg-white">
+          <DiagramCanvas svgContent={svgContent} />
         </div>
       </div>
     </div>,
@@ -109,7 +232,6 @@ function DiagramModal({ svgContent, title, summary, onClose }: { svgContent: str
 }
 
 export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProps) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = React.useState<string>("");
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const renderCountRef = React.useRef(0);
@@ -125,34 +247,67 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
         lineColor: "#3D2510",
         secondaryColor: "#F5EFE3",
         tertiaryColor: "#FFFFFF",
-        fontSize: "12px",
+        fontSize: "13px",
+        fontFamily: "var(--font-sans), 'DM Sans', system-ui, sans-serif",
+        edgeLabelBackground: "#F5EFE3",
       },
+      // Make edge labels (yes/no, true/false) readable — dark text on a cream chip,
+      // instead of the near-invisible light text the base theme produced.
+      themeCSS: `
+        .edgeLabel, .edgeLabel p { color: #3D2510 !important; fill: #3D2510 !important; background-color: #F5EFE3 !important; font-weight: 600; }
+        .edgeLabel rect { fill: #F5EFE3 !important; opacity: 1 !important; }
+        .edgeLabels .edgeLabel { padding: 1px 5px; border-radius: 4px; }
+        .node rect, .node polygon, .node circle, .node path { stroke-width: 1.5px; }
+        .cluster rect { fill: #FBF7EF !important; stroke: #D9C8AE !important; }
+        .flowchart-link { stroke-width: 1.5px; }
+      `,
       flowchart: {
         curve: "basis",
-        padding: 15,
-        nodeSpacing: 40,
-        rankSpacing: 40,
+        padding: 18,
+        nodeSpacing: 55,
+        rankSpacing: 60,
+        htmlLabels: true,
+        // We size/fit the SVG ourselves in DiagramCanvas, so don't let mermaid cap the width.
+        useMaxWidth: false,
       },
     });
   }, []);
 
   React.useEffect(() => {
     if (data?.mermaidCode) {
-      console.log("[Mermaid] Attempting to render diagram:", data.mermaidCode.substring(0, 100) + "...");
       const renderDiagram = async () => {
         try {
-          const uniqueId = `mermaid-${Date.now()}-${renderCountRef.current}`;
-          const cleanCode = data.mermaidCode
-            .replace(/```mermaid\n?/g, '')
-            .replace(/```\n?/g, '')
+          renderCountRef.current += 1;
+          const uniqueId = `mermaid-${renderCountRef.current}`;
+          let cleanCode = data.mermaidCode
+            .replace(/```mermaid\n?/g, "")
+            .replace(/```\n?/g, "")
             .trim();
-          console.log("[Mermaid] Clean code:", cleanCode.substring(0, 100) + "...");
+          // Brand consistency: strip any model-emitted colors/styling so EVERY diagram renders in
+          // the Lyzr brown/cream theme (set via mermaid.initialize), regardless of run-to-run
+          // variation. Removes classDef/style/linkStyle lines, inline ":::class" assignments, and
+          // any %%{init}%% directive that would override our theme.
+          cleanCode = cleanCode
+            .replace(/%%\{[\s\S]*?\}%%/g, "")
+            .replace(/^\s*classDef\s+.*$/gim, "")
+            .replace(/^\s*style\s+.*$/gim, "")
+            .replace(/^\s*linkStyle\s+.*$/gim, "")
+            .replace(/:::[A-Za-z0-9_-]+/g, "")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim();
+          // Superflows should read left-to-right (like Lyzr Studio). If every workload is a
+          // Superflow, force the top-level graph to LR. Manager/Single stay vertical (TD).
+          const allComplex =
+            !!data.workloads &&
+            data.workloads.length > 0 &&
+            data.workloads.every((w) => w.complexity === "complex");
+          if (allComplex) {
+            cleanCode = cleanCode.replace(/^graph\s+(TD|TB)\b/i, "graph LR");
+          }
           const { svg } = await mermaid.render(uniqueId, cleanCode);
-          console.log("[Mermaid] Render successful, SVG length:", svg.length);
           setSvgContent(svg);
         } catch (error) {
           console.error("[Mermaid] Rendering error:", error);
-          console.error("[Mermaid] Failed code:", data.mermaidCode);
           setSvgContent(`<div class="text-red-500 p-4 text-center">
             <p class="font-medium">Diagram rendering failed</p>
             <p class="text-xs mt-1">Please try again</p>
@@ -175,80 +330,49 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
             <div className="text-sm text-muted-foreground mb-2 px-1">
               <strong className="text-foreground">{data.title}:</strong> {data.summary}
             </div>
-            <div className="flex-1 relative border rounded-lg bg-white overflow-hidden" ref={containerRef}>
-              <TransformWrapper
-                initialScale={1}
-                minScale={0.5}
-                maxScale={3}
-                centerOnInit={true}
-                wheel={{ step: 0.1 }}
-                panning={{ disabled: false }}
-                limitToBounds={false}
-              >
-                {({ zoomIn, zoomOut, resetTransform }) => (
-                  <>
-                    <div className="absolute top-2 right-2 z-10 flex gap-1">
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
-                        onClick={() => zoomIn()}
-                        title="Zoom In"
-                      >
-                        <IconZoomIn className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
-                        onClick={() => zoomOut()}
-                        title="Zoom Out"
-                      >
-                        <IconZoomOut className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-7 w-7 bg-white/90 hover:bg-white shadow-sm"
-                        onClick={() => resetTransform()}
-                        title="Reset View"
-                      >
-                        <IconFocus2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-7 w-7 bg-primary/90 hover:bg-primary text-white shadow-sm"
-                        onClick={() => setIsModalOpen(true)}
-                        title="View Full Screen"
-                      >
-                        <IconMaximize className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <TransformComponent
-                      wrapperStyle={{
-                        width: "100%",
-                        height: "100%",
-                      }}
-                      contentStyle={{
-                        width: "100%",
-                        height: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
+            {data.workloads && data.workloads.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2 px-1">
+                {data.workloads.map((w, i) => {
+                  const label =
+                    w.complexity === "simple"
+                      ? "Single Agent"
+                      : w.complexity === "intermediate"
+                        ? "Manager"
+                        : w.complexity === "complex"
+                          ? "Superflow"
+                          : "Voice";
+                  const cls =
+                    w.complexity === "simple"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : w.complexity === "intermediate"
+                        ? "bg-amber-100 text-amber-700"
+                        : w.complexity === "complex"
+                          ? "bg-primary/15 text-primary"
+                          : "bg-sky-100 text-sky-700";
+                  return (
+                    <span
+                      key={i}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}
+                      title={w.reasoning ?? ""}
                     >
-                      <div
-                        className="[&_svg]:max-w-none [&_svg]:max-h-none cursor-grab active:cursor-grabbing p-4"
-                        dangerouslySetInnerHTML={{ __html: svgContent }}
-                      />
-                    </TransformComponent>
-                    <div className="absolute bottom-2 left-2 text-[10px] text-muted-foreground bg-white/80 px-2 py-1 rounded">
-                      Drag to pan • Scroll to zoom
-                    </div>
-                  </>
-                )}
-              </TransformWrapper>
+                      <span className="font-semibold">{w.name}</span>
+                      <span className="opacity-70">· {label}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex-1 relative border rounded-lg bg-white overflow-hidden">
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute top-2 right-[6.75rem] z-20 h-7 w-7 bg-primary/90 hover:bg-primary text-white shadow-sm"
+                onClick={() => setIsModalOpen(true)}
+                title="View Full Screen"
+              >
+                <IconMaximize className="h-4 w-4" />
+              </Button>
+              <DiagramCanvas svgContent={svgContent} />
             </div>
           </div>
         ) : (

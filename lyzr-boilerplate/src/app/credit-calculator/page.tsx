@@ -19,6 +19,14 @@ import {
 } from "@/lib/types";
 import { SaveTemplateModal } from "@/components/credit-calculator/save-template-modal";
 import { TemplateManagerModal } from "@/components/credit-calculator/template-manager-modal";
+import { recomputeRoiFromCredits } from "@/lib/recompute";
+
+// Use the full first line as the title (capped) and let the sidebar CSS-truncate it with a clean
+// ellipsis at the real column width — avoids the ugly double-truncation ("...customer su.").
+function deriveTitle(content: string) {
+  const firstLine = content.split("\n")[0].trim();
+  return firstLine.length > 80 ? firstLine.slice(0, 80) : firstLine;
+}
 
 let idCounter = 0;
 function generateId() {
@@ -335,6 +343,15 @@ export default function CreditCalculatorPage() {
     [activeSessionId, sessions]
   );
 
+  // Phase 2: live edits to the credit calculation re-price via the same engine and re-sync ROI.
+  const handleCreditsChange = React.useCallback((nextCredits: CreditCalculation) => {
+    setArtifactState((prev) => ({
+      ...prev,
+      credits: nextCredits,
+      roi: prev.roi ? recomputeRoiFromCredits(prev.roi, nextCredits) : prev.roi,
+    }));
+  }, []);
+
   const goToHome = React.useCallback(() => {
     setActiveSessionId(null);
     setHasStartedConversation(false);
@@ -436,7 +453,7 @@ export default function CreditCalculatorPage() {
       if (!currentSessionId) {
         const newSession: ChatSession = {
           id: generateId(),
-          title: content.slice(0, 30) + (content.length > 30 ? "..." : ""),
+          title: deriveTitle(content),
           messages: [],
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -461,9 +478,7 @@ export default function CreditCalculatorPage() {
           if (session.id === currentSessionId) {
             const updatedMessages = [...session.messages, userMessage];
             const title =
-              session.messages.length === 0
-                ? content.slice(0, 30) + (content.length > 30 ? "..." : "")
-                : session.title;
+              session.messages.length === 0 ? deriveTitle(content) : session.title;
             return { ...session, messages: updatedMessages, title, updatedAt: new Date() };
           }
           return session;
@@ -645,7 +660,15 @@ export default function CreditCalculatorPage() {
             onLogout={handleLogout}
             className="w-64 shrink-0"
           />
-          <div className="flex-1 flex items-center justify-center">
+          <div className="relative flex-1 flex items-center justify-center">
+            <a
+              href="/pricing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute top-5 right-6 text-sm font-medium text-primary underline underline-offset-4 decoration-primary/40 hover:decoration-primary transition-colors"
+            >
+              See how pricing works
+            </a>
             <LandingPage
               onSubmit={sendMessage}
               isLoading={isLoading}
@@ -690,7 +713,7 @@ export default function CreditCalculatorPage() {
             />
           </div>
           <div className="w-[60%] min-w-0 p-1.5">
-            <ArtifactPanel artifactState={artifactState} />
+            <ArtifactPanel artifactState={artifactState} onCreditsChange={handleCreditsChange} />
           </div>
         </div>
       </div>

@@ -5,11 +5,12 @@ import { ArchitectureDiagram } from "./architecture-diagram";
 import { CreditCalculation } from "./credit-calculation";
 import { ROICalculation } from "./roi-calculation";
 import { ReviewValidation } from "./review-validation";
-import { ArtifactState } from "@/lib/types";
+import { ArtifactState, CreditCalculation as CreditCalculationType } from "@/lib/types";
 import { IconBrain, IconCoins, IconChartBar, IconShieldCheck, IconLoader2, IconCheck, IconCalculator } from "@tabler/icons-react";
 
 interface ArtifactPanelProps {
   artifactState: ArtifactState;
+  onCreditsChange?: (next: CreditCalculationType) => void;
 }
 
 interface SectionHeaderProps {
@@ -41,10 +42,28 @@ function SectionHeader({ icon, title, stepNumber, isLoading, isComplete, badge }
           {icon}
           <h3 className="font-semibold text-base">{title}</h3>
         </div>
+        {/* "Updating…" shows on a RE-RUN (data already exists) where the no-data placeholder
+            wouldn't appear — so the user always sees that something is recomputing. */}
+        {isLoading && isComplete && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+            <IconLoader2 className="h-3 w-3 animate-spin" /> Updating…
+          </span>
+        )}
       </div>
       {badge && (
         <span className="text-xs text-muted-foreground italic">{badge}</span>
       )}
+    </div>
+  );
+}
+
+/** Dim + lock a section's content while it is being recomputed (only when data already exists).
+ * Must keep `h-full` so it doesn't break the height chain of fixed-height children (e.g. the
+ * architecture canvas, which fits itself into its parent's pixel height). */
+function Updatable({ updating, children }: { updating: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`h-full transition-opacity duration-200 ${updating ? "opacity-40 pointer-events-none" : ""}`}>
+      {children}
     </div>
   );
 }
@@ -60,7 +79,7 @@ function LoadingPlaceholder({ message }: { message: string }) {
   );
 }
 
-export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
+export function ArtifactPanel({ artifactState, onCreditsChange }: ArtifactPanelProps) {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const hasAnyData =
@@ -122,10 +141,12 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
                 {artifactState.isLoading.architecture && !artifactState.architecture ? (
                   <LoadingPlaceholder message="Analyzing requirements and designing architecture..." />
                 ) : (
-                  <ArchitectureDiagram
-                    data={artifactState.architecture}
-                    isLoading={false}
-                  />
+                  <Updatable updating={artifactState.isLoading.architecture}>
+                    <ArchitectureDiagram
+                      data={artifactState.architecture}
+                      isLoading={false}
+                    />
+                  </Updatable>
                 )}
               </div>
             </section>
@@ -143,10 +164,13 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
               {artifactState.isLoading.credits && !artifactState.credits ? (
                 <LoadingPlaceholder message="Calculating credit costs..." />
               ) : (
-                <CreditCalculation
-                  data={artifactState.credits}
-                  isLoading={false}
-                />
+                <Updatable updating={artifactState.isLoading.credits}>
+                  <CreditCalculation
+                    data={artifactState.credits}
+                    isLoading={false}
+                    onChange={onCreditsChange}
+                  />
+                </Updatable>
               )}
             </section>
           )}
@@ -163,10 +187,12 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
               {artifactState.isLoading.roi && !artifactState.roi ? (
                 <LoadingPlaceholder message="Comparing AI costs vs human labor..." />
               ) : (
-                <ROICalculation
-                  data={artifactState.roi}
-                  isLoading={false}
-                />
+                <Updatable updating={artifactState.isLoading.roi}>
+                  <ROICalculation
+                    data={artifactState.roi}
+                    isLoading={false}
+                  />
+                </Updatable>
               )}
             </section>
           )}
@@ -183,10 +209,12 @@ export function ArtifactPanel({ artifactState }: ArtifactPanelProps) {
               {artifactState.isLoading.review && !artifactState.review ? (
                 <LoadingPlaceholder message="Reviewing and validating calculations..." />
               ) : (
-                <ReviewValidation
-                  data={artifactState.review}
-                  isLoading={false}
-                />
+                <Updatable updating={artifactState.isLoading.review}>
+                  <ReviewValidation
+                    data={artifactState.review}
+                    isLoading={false}
+                  />
+                </Updatable>
               )}
             </section>
           )}

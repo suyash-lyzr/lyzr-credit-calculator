@@ -27,13 +27,25 @@ export interface ScenarioVariables {
   b_api: number;
 }
 
+export interface ArchitectureWorkload {
+  name: string;
+  complexity: "simple" | "intermediate" | "complex" | "voice";
+  reasoning?: string; // why this tier (name the capability that forced it)
+}
+
 export interface ArchitectureData {
   title: string;
   summary: string;
-  complexity_profile: "LOW" | "MEDIUM" | "HIGH";
-  architecture_pattern: "Single Agent" | "Orchestrator" | "Multi-Agent Chain";
-  architecture_counts: ArchitectureCounts;
-  scenario_variables: ScenarioVariables;
+
+  // --- NEW: per-workload tier assignment (the decomposition) ---
+  workloads?: ArchitectureWorkload[];
+
+  // --- Legacy fields (optional; old templates) ---
+  complexity_profile?: "LOW" | "MEDIUM" | "HIGH";
+  architecture_pattern?: "Single Agent" | "Orchestrator" | "Multi-Agent Chain";
+  architecture_counts?: ArchitectureCounts;
+  scenario_variables?: ScenarioVariables;
+
   mermaidCode: string;
 }
 
@@ -91,14 +103,71 @@ export interface WorkloadRow {
   total_cost: number;
 }
 
+// ===========================================================================
+// NEW complexity-tier pricing model (workload-based)
+// ===========================================================================
+
+export type Deployment = "cloud" | "vpc"; // cloud = SaaS, vpc = Customer VPC / On-Prem
+export type Complexity = "simple" | "intermediate" | "complex" | "voice";
+
+/** One LLM-bearing execution inside a single run of a workload. */
+export interface LlmCall {
+  label?: string; // which node/agent makes this call (e.g. "Summarizer node")
+  model: string; // model name from the Studio catalog (see context/llm-models.md)
+  provider?: string;
+  input_tokens: number;
+  output_tokens: number;
+  input_rate_per_1m?: number; // fallback only; engine prefers the catalog rate
+  output_rate_per_1m?: number;
+  cost_per_call?: number; // computed by the engine
+}
+
+/** A single piece of the use case, assigned one orchestration tier. */
+export interface AgentWorkload {
+  name: string;
+  complexity: Complexity;
+  reasoning?: string; // why this tier (name the capability that forced it)
+
+  // Runtime drivers (set the band / price-per-run):
+  sub_agents_executed?: number; // intermediate (Manager)
+  nodes_executed?: number; // complex (Superflow — primary flow)
+  execution_paths?: { nodes_executed: number; probability: number }[]; // complex — band-straddling paths
+  nested_superflow_node_counts?: number[]; // complex — each nested superflow's own node count
+  voice_minutes_per_run?: number; // voice
+
+  // Volume:
+  runs_per_period: number; // annual runs for this workload
+
+  // LLM:
+  llm_calls?: LlmCall[]; // LLM-bearing executions in ONE run
+  byo_model?: boolean; // customer brings own model → $0 LLM on the Lyzr bill
+
+  // Computed by the engine (filled server-side / on edit):
+  band_label?: string;
+  price_per_run?: number;
+  platform_cost?: number;
+  llm_cost_per_run?: number;
+  llm_cost?: number; // on the Lyzr bill (0 when BYO)
+  llm_cost_external?: number; // paid to provider (includes BYO)
+  total_cost?: number;
+}
+
 export interface CreditCalculation {
   agent_architecture_summary: string;
 
   deployment: "cloud" | "vpc";
-  rate_per_run: number;
 
-  workload_name: string;
-  unit_volume: number;
+  // --- NEW workload-based model (engine-computed) ---
+  workloads?: AgentWorkload[];
+  platform_annual_cost?: number; // Σ workload platform_cost
+  llm_annual_cost_external?: number; // Σ LLM paid to providers (includes BYO)
+  notes?: string;
+
+  // --- Legacy flat-rate fields (optional; kept for old saved templates) ---
+  rate_per_run?: number;
+
+  workload_name?: string;
+  unit_volume?: number;
 
   // --- New realistic volume model (all optional for back-compat) ---
   use_case_category?: string;
@@ -119,13 +188,13 @@ export interface CreditCalculation {
   phase_breakdown?: PhaseBreakdownRow[];
   volume_breakdown_note?: string;
 
-  // --- Existing fields ---
-  runs_per_unit: number;
-  runs_breakdown: AgentRunStep[];
-  iteration_buffer_pct: number;
-  total_annual_runs: number;
+  // --- Legacy flat-rate fields (optional; populated only by old saved templates) ---
+  runs_per_unit?: number;
+  runs_breakdown?: AgentRunStep[];
+  iteration_buffer_pct?: number;
+  total_annual_runs?: number;
 
-  lyzr_annual_cost: number;
+  lyzr_annual_cost?: number;
 
   llm_steps?: LlmStep[];
   llm_buffer_pct?: number;
@@ -155,6 +224,13 @@ export interface HumanAnalysis {
 export interface AIAnalysis {
   cost_per_unit: number;
   time_per_task_seconds: number;
+  // Fraction of units the AI handles end-to-end with NO human touch (0-1). 1.0 for fully
+  // autonomous designs; < 1 whenever the architecture keeps a human-in-the-loop / approval /
+  // review node, so a fraction of units still cost human time. Defaults to 1 if absent.
+  automation_rate?: number;
+  // Average human minutes STILL spent per unit after automation, amortized across ALL units
+  // (i.e. already accounts for the escalated fraction). 0 for fully autonomous. Defaults to 0.
+  residual_human_minutes_per_unit?: number;
 }
 
 export interface ROIVolumeEstimates {
