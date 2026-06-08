@@ -49,7 +49,7 @@ function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?
     tone === "saas"
       ? "bg-primary/10 text-primary"
       : tone === "vpc"
-        ? "bg-emerald-100 text-emerald-700"
+        ? "bg-primary text-primary-foreground"
         : "bg-muted text-muted-foreground";
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{children}</span>;
 }
