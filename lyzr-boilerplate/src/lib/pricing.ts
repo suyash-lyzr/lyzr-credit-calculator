@@ -187,11 +187,13 @@ export const MODEL_RATES: Record<string, ModelRate> = {
   "gpt-5-mini": { provider: "OpenAI", input: 0.25, output: 2.0 },
   "gpt-5-nano": { provider: "OpenAI", input: 0.05, output: 0.4 },
   "gpt-5-1": { provider: "OpenAI", input: 1.25, output: 10 },
-  "gpt-5-2": { provider: "OpenAI", input: 1.25, output: 10 }, // estimate (gpt-5 family)
-  "gpt-5-4": { provider: "OpenAI", input: 1.25, output: 10 }, // estimate (gpt-5 family)
-  "gpt-5-4-mini": { provider: "OpenAI", input: 0.25, output: 2.0 },
-  "gpt-5-4-nano": { provider: "OpenAI", input: 0.05, output: 0.4 }, // estimate (nano family)
-  "gpt-5-5": { provider: "OpenAI", input: 1.5, output: 12 }, // estimate (newest flagship)
+  "gpt-5-2": { provider: "OpenAI", input: 1.25, output: 10 }, // estimate (gpt-5 family; not a public SKU)
+  "gpt-5-4": { provider: "OpenAI", input: 2.5, output: 15 }, // official (developers.openai.com)
+  "gpt-5-4-mini": { provider: "OpenAI", input: 0.75, output: 4.5 }, // official
+  "gpt-5-4-nano": { provider: "OpenAI", input: 0.2, output: 1.25 }, // official
+  "gpt-5-4-pro": { provider: "OpenAI", input: 30, output: 180 }, // official (pro reasoning)
+  "gpt-5-5": { provider: "OpenAI", input: 5.0, output: 30 }, // official
+  "gpt-5-5-pro": { provider: "OpenAI", input: 30, output: 180 }, // official (pro reasoning)
   // Amazon Bedrock
   "nova-micro": { provider: "Amazon Bedrock", input: 0.035, output: 0.14 },
   "nova-lite": { provider: "Amazon Bedrock", input: 0.06, output: 0.24 },
@@ -231,9 +233,9 @@ export const MODEL_RATES: Record<string, ModelRate> = {
   "claude-opus-4-5": { provider: "Anthropic", input: 5.0, output: 25 },
   "claude-sonnet-4-6": { provider: "Anthropic", input: 3.0, output: 15 },
   "claude-haiku-4-5": { provider: "Anthropic", input: 1.0, output: 5.0 },
-  "claude-opus-4-6": { provider: "Anthropic", input: 5.0, output: 25 }, // estimate (Opus line)
-  "claude-opus-4-7": { provider: "Anthropic", input: 5.0, output: 25 },
-  "claude-opus-4-8": { provider: "Anthropic", input: 5.0, output: 25 }, // latest Opus; estimate (Opus line)
+  "claude-opus-4-6": { provider: "Anthropic", input: 5.0, output: 25 }, // official (platform.claude.com)
+  "claude-opus-4-7": { provider: "Anthropic", input: 5.0, output: 25 }, // official
+  "claude-opus-4-8": { provider: "Anthropic", input: 5.0, output: 25 }, // official (latest Opus)
   // Perplexity
   sonar: { provider: "Perplexity", input: 1.0, output: 1.0 },
   "sonar-pro": { provider: "Perplexity", input: 3.0, output: 15 },
