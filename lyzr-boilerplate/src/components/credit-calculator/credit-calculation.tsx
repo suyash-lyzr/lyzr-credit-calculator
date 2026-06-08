@@ -304,17 +304,32 @@ function WorkloadCard({
                 <tbody className="divide-y">
                   {calls.map((c, i) => (
                     <tr key={i}>
-                      <td className="py-1.5 px-3">{c.label ?? "—"}</td>
-                      <td className="py-1.5 px-3">
+                      <td className="py-2 px-3 align-top max-w-[15rem]">
+                        <div className="font-medium">
+                          {c.label ?? "—"}
+                          {c.node_type && (
+                            <span className="ml-1 font-normal text-muted-foreground">({c.node_type})</span>
+                          )}
+                        </div>
+                        {c.purpose && (
+                          <div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{c.purpose}</div>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 align-top max-w-[14rem]">
                         <div className="font-medium">{c.model}</div>
                         {c.provider && (
                           <div className="text-[10px] text-muted-foreground">{c.provider}</div>
                         )}
+                        {c.model_rationale && (
+                          <div className="mt-0.5 text-[10px] italic leading-snug text-muted-foreground">
+                            {c.model_rationale}
+                          </div>
+                        )}
                       </td>
-                      <td className="py-1.5 px-3 font-mono text-right whitespace-nowrap">
+                      <td className="py-2 px-3 font-mono text-right align-top whitespace-nowrap">
                         {formatNumber(c.input_tokens)} / {formatNumber(c.output_tokens)}
                       </td>
-                      <td className="py-1.5 px-3 font-mono text-right">
+                      <td className="py-2 px-3 font-mono text-right align-top">
                         {formatMicroCurrency(c.cost_per_call ?? 0)}
                       </td>
                     </tr>

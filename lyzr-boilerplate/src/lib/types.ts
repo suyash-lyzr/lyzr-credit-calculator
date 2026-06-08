@@ -113,8 +113,11 @@ export type Complexity = "simple" | "intermediate" | "complex" | "voice";
 /** One LLM-bearing execution inside a single run of a workload. */
 export interface LlmCall {
   label?: string; // which node/agent makes this call (e.g. "Summarizer node")
+  node_type?: string; // kind of node, e.g. "LLM Agent", "Agent", "LLM node"
+  purpose?: string; // one-line of what this node/agent does (e.g. "Classifies intent + urgency")
   model: string; // model name from the Studio catalog (see context/llm-models.md)
   provider?: string;
+  model_rationale?: string; // one-line on why this model was chosen for this node
   input_tokens: number;
   output_tokens: number;
   input_rate_per_1m?: number; // fallback only; engine prefers the catalog rate

@@ -261,8 +261,11 @@ function normalizeModel(name: string): string {
 
 export interface LlmCallInput {
   label?: string;
+  node_type?: string;
+  purpose?: string;
   model: string;
   provider?: string;
+  model_rationale?: string;
   input_tokens: number;
   output_tokens: number;
   /** Optional explicit rates — used only as a fallback when the model isn't in MODEL_RATES. */
