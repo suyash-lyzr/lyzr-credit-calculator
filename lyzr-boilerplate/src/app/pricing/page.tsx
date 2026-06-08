@@ -192,7 +192,7 @@ export default function PricingExplainerPage() {
           <div className="mt-6 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <p className="text-xs font-semibold text-primary">No black box</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Every rate and rule below is exactly what the calculator uses behind the scenes.
+              Every rate and rule shown is exactly what the calculator uses behind the scenes.
             </p>
           </div>
         </nav>
@@ -425,51 +425,97 @@ export default function PricingExplainerPage() {
                 </p>
               </Card>
 
-              <h4 className="mt-5 mb-2 text-sm font-semibold">When a job is a Single Agent</h4>
-              <p className="text-sm text-muted-foreground">
-                Use a <strong className="text-foreground">single agent</strong> when the whole job is{" "}
-                <strong className="text-foreground">one specific task</strong> that one agent can finish on its own —
-                answer a question, summarize a document, classify a ticket, or hold a conversation. It can still use a
-                knowledge base, tools, and memory and stay a single agent. This is the most common case.
-                <br />
-                <em className="text-foreground/70">
-                  Example: an FAQ assistant that answers customer questions from your help center.
-                </em>
+              <p className="mt-6 mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                The three patterns
               </p>
-
-              <h4 className="mt-5 mb-2 text-sm font-semibold">When a job is a Manager with sub-agents</h4>
-              <p className="text-sm text-muted-foreground">
-                Use a <strong className="text-foreground">manager</strong> when one job needs{" "}
-                <strong className="text-foreground">several specialist agents working together</strong>, and a manager
-                decides which specialists to call and combines their answers. It&apos;s all reasoning — there&apos;s no
-                fixed step-by-step workflow, no approvals, and no external system calls.
-                <br />
-                <em className="text-foreground/70">
-                  Example: a research assistant where one specialist searches the web, another reads filings, and
-                  another scans news — then the manager writes a single brief.
-                </em>
-              </p>
-
-              <h4 className="mt-5 mb-2 text-sm font-semibold">When a job is a Superflow</h4>
-              <p className="text-sm text-muted-foreground">
-                Use a Superflow when the work is a <strong className="text-foreground">defined, repeatable workflow</strong>{" "}
-                — the same steps run in the same order every time — <strong className="text-foreground">and</strong> it
-                needs one of these special capabilities a single agent or manager can&apos;t provide:
-              </p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {[
-                  ["Human-in-the-loop approval", "Pause for a person to approve/reject (Wait for Approval)"],
-                  ["Deterministic control flow", "If/Else, Switch, Loop, Filter, Merge"],
-                  ["Non-LLM / integration steps", "HTTP, Code, Parse/Extract, Crypto, Set"],
-                  ["AI Swarm", "Split into parallel sub-tasks as a workflow step"],
-                  ["Durable, long-running execution", "Waits of days/weeks, retries, exactly-once"],
-                  ["A fixed multi-step pipeline", "Agents/steps chained in a defined order"],
-                ].map(([t, d]) => (
-                  <div key={t} className="rounded-lg border bg-card px-3 py-2.5">
-                    <p className="text-sm font-medium">{t}</p>
-                    <p className="text-xs text-muted-foreground">{d}</p>
+              <div className="space-y-3">
+                {/* SINGLE AGENT */}
+                <div className="flex gap-3.5 rounded-xl border border-primary/15 bg-primary/[0.03] p-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <IconUser className="h-5 w-5" />
                   </div>
-                ))}
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-semibold">Single Agent</h4>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        one task, one agent
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                      Use a <strong className="text-foreground">single agent</strong> when the whole job is{" "}
+                      <strong className="text-foreground">one specific task</strong> that one agent can finish on its
+                      own — answer a question, summarize a document, classify a ticket, or hold a conversation. It can
+                      still use a knowledge base, tools, and memory and stay a single agent. This is the most common
+                      case.
+                    </p>
+                    <p className="mt-2.5 rounded-lg bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground/70">Example</span> · an FAQ assistant that answers
+                      customer questions from your help center.
+                    </p>
+                  </div>
+                </div>
+
+                {/* MANAGER */}
+                <div className="flex gap-3.5 rounded-xl border border-primary/25 bg-primary/[0.055] p-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <IconUsersGroup className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-semibold">Manager with sub-agents</h4>
+                      <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        specialists, coordinated
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                      Use a <strong className="text-foreground">manager</strong> when one job needs{" "}
+                      <strong className="text-foreground">several specialist agents working together</strong>, and a
+                      manager decides which specialists to call and combines their answers. It&apos;s all reasoning —
+                      there&apos;s no fixed step-by-step workflow, no approvals, and no external system calls.
+                    </p>
+                    <p className="mt-2.5 rounded-lg bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground/70">Example</span> · a research assistant where one
+                      specialist searches the web, another reads filings, and another scans news — then the manager
+                      writes a single brief.
+                    </p>
+                  </div>
+                </div>
+
+                {/* SUPERFLOW */}
+                <div className="flex gap-3.5 rounded-xl border border-primary/40 bg-primary/[0.08] p-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                    <IconSitemap className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-semibold">Superflow</h4>
+                      <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        a defined workflow
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-sm text-muted-foreground">
+                      Use a Superflow when the work is a{" "}
+                      <strong className="text-foreground">defined, repeatable workflow</strong> — the same steps run in
+                      the same order every time — <strong className="text-foreground">and</strong> it needs one of these
+                      special capabilities a single agent or manager can&apos;t provide:
+                    </p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {[
+                        ["Human-in-the-loop approval", "Pause for a person to approve/reject (Wait for Approval)"],
+                        ["Deterministic control flow", "If/Else, Switch, Loop, Filter, Merge"],
+                        ["Non-LLM / integration steps", "HTTP, Code, Parse/Extract, Crypto, Set"],
+                        ["AI Swarm", "Split into parallel sub-tasks as a workflow step"],
+                        ["Durable, long-running execution", "Waits of days/weeks, retries, exactly-once"],
+                        ["A fixed multi-step pipeline", "Agents/steps chained in a defined order"],
+                      ].map(([t, d]) => (
+                        <div key={t} className="rounded-lg border bg-card px-3 py-2.5">
+                          <p className="text-sm font-medium">{t}</p>
+                          <p className="text-xs text-muted-foreground">{d}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
               <h4 className="mt-6 mb-2 text-sm font-semibold">The decision in 4 steps (for each part of the app)</h4>
               <ol className="space-y-2 text-sm">
