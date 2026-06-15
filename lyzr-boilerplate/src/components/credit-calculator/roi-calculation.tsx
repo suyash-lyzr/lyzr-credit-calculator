@@ -54,7 +54,18 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
 
   const yearlyVolume = data.volume_estimates.units_per_month * 12;
   const humanYearlyCost = data.human_analysis.cost_per_unit * yearlyVolume;
-  const aiPlatformYearlyCost = data.ai_analysis.cost_per_unit * yearlyVolume;
+  // cost_per_unit is the ALL-IN AI tooling cost (Lyzr platform + LLM) per unit.
+  const aiToolingYearlyCost = data.ai_analysis.cost_per_unit * yearlyVolume;
+  // Split for display: Lyzr platform vs LLM (pass-through to provider when BYO). Falls back
+  // gracefully for older artifacts that didn't carry the split.
+  const cmp = data.comparison ?? ({} as typeof data.comparison);
+  const aiLlmYearlyCost =
+    typeof cmp.ai_llm_yearly_cost === "number" ? cmp.ai_llm_yearly_cost : 0;
+  const aiLyzrPlatformYearlyCost =
+    typeof cmp.ai_platform_yearly_cost === "number"
+      ? cmp.ai_platform_yearly_cost
+      : Math.max(0, aiToolingYearlyCost - aiLlmYearlyCost);
+  const llmIsPassThrough = !!cmp.ai_llm_is_passthrough;
 
   // Residual human cost: if the architecture keeps a human-in-the-loop (approval / review /
   // escalation node), a fraction of units still cost human time. Honest ROI subtracts that from
@@ -81,8 +92,8 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
   const residualHumanYearlyCost =
     (data.human_analysis.fully_loaded_rate / 60) * residualMinutesPerUnit * yearlyVolume;
 
-  // Total AI-solution cost = Lyzr platform + LLM (cost_per_unit) PLUS any human time retained.
-  const aiYearlyCost = aiPlatformYearlyCost + residualHumanYearlyCost;
+  // Total AI-solution cost = Lyzr platform + LLM (pass-through) PLUS any human time retained.
+  const aiYearlyCost = aiToolingYearlyCost + residualHumanYearlyCost;
   const netSavings = humanYearlyCost - aiYearlyCost;
   const savingsPercentage = ((netSavings / humanYearlyCost) * 100).toFixed(1);
 
@@ -94,6 +105,18 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
       currency: "USD",
       maximumFractionDigits: 0,
     }).format(value);
+
+  // One consistent "what makes up the AI cost" breakdown, reused in the table and the bottom line.
+  const aiCostParts: string[] = [`${formatExact(aiLyzrPlatformYearlyCost)} Lyzr platform`];
+  if (aiLlmYearlyCost > 0) {
+    aiCostParts.push(
+      `${formatExact(aiLlmYearlyCost)} LLM ${llmIsPassThrough ? "paid to provider" : "on Lyzr bill"}`
+    );
+  }
+  if (hasResidualHuman) {
+    aiCostParts.push(`${formatExact(residualHumanYearlyCost)} retained human review`);
+  }
+  const aiCostBreakdown = aiCostParts.join(" + ");
 
   return (
     <div className="space-y-4">
@@ -174,11 +197,7 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
               <td className="py-2.5 px-4">{formatCurrency(humanYearlyCost)}</td>
               <td className="py-2.5 px-4">
                 {formatExact(aiYearlyCost)}
-                {hasResidualHuman && (
-                  <span className="text-muted-foreground">
-                    {" "}({formatExact(aiPlatformYearlyCost)} Lyzr + {formatExact(residualHumanYearlyCost)} human)
-                  </span>
-                )}
+                <span className="text-muted-foreground"> ({aiCostBreakdown})</span>
               </td>
             </tr>
             <tr className="bg-muted/30">
@@ -193,17 +212,22 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
       </div>
 
       <p className="text-sm">
-        <span className="font-semibold">The Bottom Line:</span> For a total annual cost of ~{formatExact(aiYearlyCost)}
-        {hasResidualHuman
-          ? ` (${formatExact(aiPlatformYearlyCost)} Lyzr + ${formatExact(residualHumanYearlyCost)} retained human review)`
-          : " (Lyzr agent runs + LLM pass-through)"}
-        , you bring {data.use_case.toLowerCase()} down from {formatCurrency(humanYearlyCost)} in manual labor — a{" "}
-        {formatCurrency(netSavings)} ({savingsPercentage}%) saving, with instant scalability and 24/7 execution.
+        <span className="font-semibold">The Bottom Line:</span> For a total annual cost of ~{formatExact(aiYearlyCost)}{" "}
+        ({aiCostBreakdown}), you bring {data.use_case.toLowerCase()} down from {formatCurrency(humanYearlyCost)} in
+        manual labor — a {formatCurrency(netSavings)} ({savingsPercentage}%) saving, with instant scalability and 24/7
+        execution.
         {hasResidualHuman &&
           (isEveryRunReview
             ? " The retained human time is a quick sign-off on each run — the AI still does the heavy lifting."
             : " The remaining human time covers the lower-confidence cases the design deliberately escalates.")}
       </p>
+      {aiLlmYearlyCost > 0 && llmIsPassThrough && (
+        <p className="text-xs text-muted-foreground">
+          Note: the {formatExact(aiLlmYearlyCost)} LLM cost is <span className="font-medium">pass-through</span> — paid
+          directly to the model provider, not billed by Lyzr. It&apos;s included here so the savings reflect the true
+          all-in cost of the solution. Your Lyzr invoice is {formatExact(aiLyzrPlatformYearlyCost)}.
+        </p>
+      )}
     </div>
   );
 }

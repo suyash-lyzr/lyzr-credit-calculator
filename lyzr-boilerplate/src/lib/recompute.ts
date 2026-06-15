@@ -42,17 +42,24 @@ export function recomputeRoiFromCredits(
     0
   );
   const unitsPerYear = primaryRuns > 0 ? primaryRuns : roi.volume_estimates.units_per_year;
-  const aiAnnualCost =
-    typeof credits.total_annual_cost === "number"
-      ? credits.total_annual_cost
+  // Split AI cost into Lyzr platform vs LLM-to-provider so savings are all-in (BYO LLM included).
+  const aiPlatformAnnualCost =
+    typeof credits.platform_annual_cost === "number"
+      ? credits.platform_annual_cost
       : roi.ai_analysis.cost_per_unit * unitsPerYear;
+  const aiLlmAnnualCost =
+    typeof credits.llm_annual_cost_external === "number" ? credits.llm_annual_cost_external : 0;
+  const aiLlmIsPassThrough =
+    (credits.llm_annual_cost ?? 0) === 0 && aiLlmAnnualCost > 0;
 
   const { comparison, aiCostPerUnit, unitsPerMonth, roiPercentage } = computeRoiComparison({
     unitsPerYear,
     loadedRate: roi.human_analysis.fully_loaded_rate,
     humanCostPerUnit: roi.human_analysis.cost_per_unit,
     humanTimeMinutes: roi.human_analysis.time_per_task_minutes,
-    aiAnnualCost,
+    aiPlatformAnnualCost,
+    aiLlmAnnualCost,
+    aiLlmIsPassThrough,
     aiTimeSeconds: roi.ai_analysis.time_per_task_seconds,
     automationRate: roi.ai_analysis.automation_rate ?? 1,
     residualMinutesPerUnit: roi.ai_analysis.residual_human_minutes_per_unit ?? 0,

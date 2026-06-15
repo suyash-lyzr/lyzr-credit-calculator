@@ -212,7 +212,9 @@ Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_
     name: "calculate_roi",
     description: `Provide the DESIGN INPUTS for an ROI comparison (AI cost vs human labor). The SERVER computes the comparison deterministically (yearly costs, residual human cost, net savings, %, payback, roi_percentage) and returns it — DO NOT compute savings/percentages yourself. After the result returns, quote ITS comparison numbers exactly in your chat summary.
 
-Use ai_analysis.cost_per_unit = total_annual_cost (from the calculate_credits result) / annual business-unit volume. This INCLUDES both platform and LLM cost.
+Use ai_analysis.cost_per_unit = (Lyzr platform cost + LLM cost paid to the provider) / annual business-unit volume — the ALL-IN cost of the AI solution. The LLM cost is counted EVEN WHEN the customer brings their own model (BYO / pass-through, $0 on the Lyzr bill), because it's still a real cost they pay. The server recomputes this all-in figure deterministically.
+
+ALL-IN AI COST IN YOUR PROSE (important): when you state the AI cost or savings in the chat summary, use the ALL-IN figure (Lyzr platform + LLM), NOT "platform only". Always show the split and clearly label the LLM portion as pass-through paid directly to the model provider — e.g. "AI cost: $2,448/yr = $1,440 Lyzr platform + $1,008 LLM (pass-through, paid to Anthropic)". The savings must be computed against this all-in number so they're honest.
 
 VOLUME CONSISTENCY (critical): volume_estimates.units_per_year MUST equal the total annual runs of the primary business workload you already priced in calculate_credits (e.g. if that workload had runs_per_period = 200, then units_per_year = 200 and units_per_month = 200/12). Do NOT re-estimate or round it to a different number — the ROI volume and the credits volume must match exactly.
 
@@ -266,7 +268,7 @@ TIME SAVINGS must reflect the reduction in HUMAN effort, not AI compute latency.
         ai_analysis: {
           type: "object",
           properties: {
-            cost_per_unit: { type: "number", description: "total_annual_cost / annual unit volume (platform + LLM)" },
+            cost_per_unit: { type: "number", description: "all-in AI cost per unit = (Lyzr platform + LLM paid to provider, incl. BYO pass-through) / annual unit volume" },
             time_per_task_seconds: { type: "number" },
             automation_rate: { type: "number", description: "Fraction of units handled end-to-end with NO human touch (0-1). 1.0 only if the design is fully autonomous (no human node). < 1 if there is any HITL / approval / review / escalation node." },
             residual_human_minutes_per_unit: { type: "number", description: "Avg human minutes still spent per unit after automation, amortized across ALL units = (1 - automation_rate) x review_minutes_per_escalated_unit. 0 if fully autonomous." },
@@ -311,7 +313,7 @@ Checks:
 3. Runs: runs_per_period realistic per workload; chat = 1 run/message; scheduled fires counted; rework that re-triggers adds runs (not nodes).
 4. LLM: llm_calls present for every LLM-bearing execution; models from the real catalog; cheapest-that-clears-the-bar; mixed across nodes; tokens reasonable. LLM tied to executions, not run count.
 5. Deployment correct (cloud/vpc). BYO flag correct.
-6. ROI: ai cost_per_unit = total_annual_cost / unit volume; savings plausible. HITL CONSISTENCY: if any workload has a human node (Wait-for-Approval / review / escalation / confidence gate to a person), automation_rate MUST be < 1 and residual_human_minutes_per_unit > 0 — flag as critical if the ROI claims 100% automation while the architecture shows a human node. Conversely a fully autonomous design must have automation_rate = 1.
+6. ROI: ai cost_per_unit = all-in (Lyzr platform + LLM paid to provider incl. BYO) / unit volume; savings computed against the all-in cost and plausible; LLM shown as pass-through. HITL CONSISTENCY: if any workload has a human node (Wait-for-Approval / review / escalation / confidence gate to a person), automation_rate MUST be < 1 and residual_human_minutes_per_unit > 0 — flag as critical if the ROI claims 100% automation while the architecture shows a human node. Conversely a fully autonomous design must have automation_rate = 1.
 
 DECISION: all pass -> "approved", issues:[]. Any failure -> "needs_revision" with issues.`,
     input_schema: {
@@ -568,11 +570,20 @@ function buildRoiArtifact(
   const automationRate = Math.max(0, Math.min(1, num(ai.automation_rate, 1)));
   const residualMinutes = Math.max(0, num(ai.residual_human_minutes_per_unit, 0));
 
-  // Authoritative AI platform+LLM annual cost from credits; fall back to the model's per-unit.
-  const aiAnnualCost =
-    creditArtifact && typeof creditArtifact.total_annual_cost === "number"
-      ? creditArtifact.total_annual_cost
+  // Authoritative AI cost from credits, split into Lyzr platform vs LLM (paid to provider). Even
+  // BYO LLM (=$0 on the Lyzr bill) is a real cost of the AI solution, so honest savings include it.
+  const aiPlatformAnnualCost =
+    creditArtifact && typeof creditArtifact.platform_annual_cost === "number"
+      ? creditArtifact.platform_annual_cost
       : num(ai.cost_per_unit) * unitsPerYear;
+  const aiLlmAnnualCost =
+    creditArtifact && typeof creditArtifact.llm_annual_cost_external === "number"
+      ? creditArtifact.llm_annual_cost_external
+      : 0;
+  const aiLlmIsPassThrough =
+    !!creditArtifact &&
+    num(creditArtifact.llm_annual_cost) === 0 &&
+    aiLlmAnnualCost > 0;
 
   const { comparison, aiCostPerUnit, unitsPerMonth: computedUnitsPerMonth, roiPercentage } =
     computeRoiComparison({
@@ -580,7 +591,9 @@ function buildRoiArtifact(
       loadedRate: num(human.fully_loaded_rate),
       humanCostPerUnit: num(human.cost_per_unit),
       humanTimeMinutes: num(human.time_per_task_minutes),
-      aiAnnualCost,
+      aiPlatformAnnualCost,
+      aiLlmAnnualCost,
+      aiLlmIsPassThrough,
       aiTimeSeconds: num(ai.time_per_task_seconds),
       automationRate,
       residualMinutesPerUnit: residualMinutes,

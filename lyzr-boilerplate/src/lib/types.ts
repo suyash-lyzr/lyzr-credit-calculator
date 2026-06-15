@@ -247,6 +247,10 @@ export interface ROIComparison {
   monthly_savings: number;
   human_yearly_cost: number;
   ai_yearly_cost: number;
+  ai_platform_yearly_cost?: number; // Lyzr platform only
+  ai_llm_yearly_cost?: number; // LLM paid to provider (pass-through if BYO)
+  ai_llm_is_passthrough?: boolean; // true = LLM billed directly by provider, not on the Lyzr bill
+  residual_human_yearly_cost?: number;
   yearly_savings: number;
   savings_percentage: number;
   time_savings_percentage: number;

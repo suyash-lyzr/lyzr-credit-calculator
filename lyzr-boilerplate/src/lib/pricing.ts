@@ -374,7 +374,9 @@ export interface RoiComparisonInput {
   loadedRate: number; // fully-loaded human $/hr
   humanCostPerUnit: number; // human $ per business unit
   humanTimeMinutes: number; // human minutes per unit (manual)
-  aiAnnualCost: number; // real Lyzr bill (platform + LLM) for the year
+  aiPlatformAnnualCost: number; // Lyzr platform spend (runs x complexity) for the year
+  aiLlmAnnualCost: number; // LLM spend the customer pays the provider (incl. BYO pass-through)
+  aiLlmIsPassThrough: boolean; // true = LLM is paid directly to the provider (BYO), $0 on Lyzr bill
   aiTimeSeconds: number; // AI processing seconds per unit
   automationRate: number; // 0-1 fraction fully hands-off
   residualMinutesPerUnit: number; // human minutes retained per unit (amortized across all)
@@ -385,8 +387,10 @@ export interface RoiComparison {
   ai_monthly_cost: number;
   monthly_savings: number;
   human_yearly_cost: number;
-  ai_yearly_cost: number;
-  ai_platform_yearly_cost: number;
+  ai_yearly_cost: number; // all-in: platform + LLM + retained human
+  ai_platform_yearly_cost: number; // Lyzr platform only
+  ai_llm_yearly_cost: number; // LLM paid to provider (pass-through if BYO)
+  ai_llm_is_passthrough: boolean; // true = LLM billed directly by provider, not on the Lyzr bill
   residual_human_yearly_cost: number;
   automation_rate: number;
   yearly_savings: number;
@@ -407,9 +411,14 @@ export function computeRoiComparison(i: RoiComparisonInput): {
   const residualMinutes = Math.max(0, i.residualMinutesPerUnit);
 
   const humanYearly = i.humanCostPerUnit * units;
-  const aiPlatformYearly = Math.max(0, i.aiAnnualCost);
+  const aiPlatformYearly = Math.max(0, i.aiPlatformAnnualCost);
+  const aiLlmYearly = Math.max(0, i.aiLlmAnnualCost);
+  // All-in AI tooling cost = Lyzr platform + the LLM the customer pays the provider. Even when the
+  // LLM is BYO ($0 on the Lyzr bill), it's a real cost of the AI solution, so honest savings count
+  // it. The residual human review (if any) is added on top.
+  const aiToolingYearly = aiPlatformYearly + aiLlmYearly;
   const residualHumanYearly = (i.loadedRate / 60) * residualMinutes * units;
-  const aiYearly = aiPlatformYearly + residualHumanYearly;
+  const aiYearly = aiToolingYearly + residualHumanYearly;
 
   const yearlySavings = humanYearly - aiYearly;
   const savingsPct = humanYearly > 0 ? (yearlySavings / humanYearly) * 100 : 0;
@@ -435,6 +444,8 @@ export function computeRoiComparison(i: RoiComparisonInput): {
       human_yearly_cost: humanYearly,
       ai_yearly_cost: aiYearly,
       ai_platform_yearly_cost: aiPlatformYearly,
+      ai_llm_yearly_cost: aiLlmYearly,
+      ai_llm_is_passthrough: !!i.aiLlmIsPassThrough,
       residual_human_yearly_cost: residualHumanYearly,
       automation_rate: automationRate,
       yearly_savings: yearlySavings,
@@ -442,7 +453,7 @@ export function computeRoiComparison(i: RoiComparisonInput): {
       time_savings_percentage: Math.round(timeSavingsPct * 10) / 10,
       payback_period_days: Math.round(paybackDays),
     },
-    aiCostPerUnit: units > 0 ? round6(aiPlatformYearly / units) : 0,
+    aiCostPerUnit: units > 0 ? round6(aiToolingYearly / units) : 0,
     unitsPerMonth: units / 12,
     roiPercentage: Math.round(roiPct),
   };
