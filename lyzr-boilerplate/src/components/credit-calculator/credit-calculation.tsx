@@ -405,10 +405,15 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
   };
   const setDeployment = (deployment: Deployment) => applyWorkloads(workloads, deployment);
   const platformTotal = data.platform_annual_cost ?? workloads.reduce((s, w) => s + (w.platform_cost ?? 0), 0);
-  const llmTotal = data.llm_annual_cost ?? workloads.reduce((s, w) => s + (w.llm_cost ?? 0), 0);
-  const llmExternal = data.llm_annual_cost_external ?? llmTotal;
-  const grandTotal = data.total_annual_cost ?? platformTotal + llmTotal;
+  const llmOnLyzrBill = data.llm_annual_cost ?? workloads.reduce((s, w) => s + (w.llm_cost ?? 0), 0);
+  // The LLM cost the customer actually pays the provider (includes BYO pass-through). This is what
+  // the "LLM" card should show — $0 there was confusing when it's labeled "pass-through".
+  const llmExternal = data.llm_annual_cost_external ?? llmOnLyzrBill;
   const hasByo = workloads.some((w) => w.byo_model);
+  // Portion paid DIRECTLY to the provider (BYO), i.e. not on the Lyzr invoice.
+  const llmPassThrough = Math.max(0, llmExternal - llmOnLyzrBill);
+  const lyzrInvoice = platformTotal + llmOnLyzrBill; // what Lyzr bills
+  const allInTotal = platformTotal + llmExternal; // platform + all LLM the customer pays
 
   return (
     <div className="space-y-5">
@@ -523,24 +528,27 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
           </div>
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
-              LLM Pass-through
+              LLM {hasByo ? "(Pass-through)" : "Pass-through"}
             </p>
-            <p className="text-2xl font-bold text-foreground mt-0.5">{formatCurrency(llmTotal)}</p>
+            <p className="text-2xl font-bold text-foreground mt-0.5">{formatCurrency(llmExternal)}</p>
             <p className="text-[11px] text-foreground/60 mt-1">
               {hasByo
-                ? `On Lyzr bill. ${formatCurrency(llmExternal)} paid to providers (incl. BYO).`
-                : "Billed by providers. No Lyzr markup."}
+                ? "Paid directly to the model provider (BYO) — $0 on your Lyzr invoice."
+                : "Billed at provider rates. No Lyzr markup."}
             </p>
           </div>
         </div>
 
         <div className="rounded-lg border-2 border-primary bg-primary/10 px-4 py-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Total Annual Cost</p>
-            <p className="text-2xl font-bold text-primary">{formatCurrency(grandTotal)}</p>
+            <p className="text-sm font-semibold text-foreground">Total Annual Cost (all-in)</p>
+            <p className="text-2xl font-bold text-primary">{formatCurrency(allInTotal)}</p>
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Platform ({formatCurrency(platformTotal)}) + LLM ({formatCurrency(llmTotal)}).
+            Platform ({formatCurrency(platformTotal)}) + LLM ({formatCurrency(llmExternal)}).
+            {llmPassThrough > 0
+              ? ` ${formatCurrency(llmPassThrough)} of LLM is pass-through paid to the provider — your Lyzr invoice is ${formatCurrency(lyzrInvoice)}.`
+              : ""}
           </p>
         </div>
       </section>
