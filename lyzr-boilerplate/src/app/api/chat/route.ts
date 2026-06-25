@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { computeTotals, computeRoiComparison, type Deployment, type WorkloadInput } from "@/lib/pricing";
@@ -6,11 +6,21 @@ import { computeTotals, computeRoiComparison, type Deployment, type WorkloadInpu
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-const tools: Anthropic.Tool[] = [
+// The orchestrator "brain" that designs the architecture and drives the tools. Overridable via env.
+const ORCHESTRATOR_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
+
+/** Tool spec in the format we author below (Anthropic-style input_schema). */
+interface ToolSpec {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+const tools: ToolSpec[] = [
   {
     name: "generate_architecture",
     description: `Design the production-grade solution for the use case, decompose it into agent WORKLOADS, assign each the right orchestration tier, then produce a Mermaid diagram.
@@ -340,6 +350,16 @@ DECISION: all pass -> "approved", issues:[]. Any failure -> "needs_revision" wit
   },
 ];
 
+// OpenAI function-calling format: { type: "function", function: { name, description, parameters } }.
+const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((t) => ({
+  type: "function",
+  function: {
+    name: t.name,
+    description: t.description,
+    parameters: t.input_schema,
+  },
+}));
+
 const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that estimates the cost of running AI agents on Lyzr using the COMPLEXITY-TIER pricing model. Be conversational but precise.
 
 ## ========== PRICING MODEL ==========
@@ -634,11 +654,11 @@ export async function POST(request: NextRequest) {
         };
 
         const runConversationLoop = async (
-          conversationMessages: Anthropic.MessageParam[]
+          conversationMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
         ): Promise<void> => {
           const MAX_ITERATIONS = 10;
           let iteration = 0;
-          let currentMessages = [...conversationMessages];
+          const currentMessages = [...conversationMessages];
           // Remember the most recent credits artifact so calculate_roi can derive volume + AI cost
           // from the actually-priced design (keeps ROI and credits perfectly consistent).
           let lastCreditArtifact: ReturnType<typeof buildCreditArtifact> | null = null;
@@ -647,139 +667,129 @@ export async function POST(request: NextRequest) {
             iteration++;
 
             let accumulatedText = "";
-            let toolUseBlock: Anthropic.ToolUseBlock | null = null;
-            let currentToolInput = "";
-            let isProcessingTool = false;
+            // OpenAI streams tool calls as deltas keyed by index: the name arrives once, the JSON
+            // arguments arrive in pieces. Accumulate them per index.
+            const toolCallAcc: Record<
+              number,
+              { id: string; name: string; args: string; started: boolean }
+            > = {};
 
-            const response = anthropic.messages.stream({
-              model: "claude-opus-4-7",
+            const response = await openai.chat.completions.create({
+              model: ORCHESTRATOR_MODEL,
               // Generous ceiling: a long architecture-reasoning block followed by a large
-              // calculate_credits tool input (17-node Superflow with many llm_calls) was
-              // exceeding 8192 and truncating the tool-input JSON, which parsed to empty and
-              // forced an ugly retry. 16k leaves ample headroom.
-              max_tokens: 16384,
-              system: systemPrompt,
-              tools,
-              tool_choice: { type: "auto" },
+              // calculate_credits tool input (17-node Superflow with many llm_calls) needs room.
+              max_completion_tokens: 16384,
               messages: currentMessages,
+              tools: openaiTools,
+              tool_choice: "auto",
+              stream: true,
             });
 
-            for await (const event of response) {
-              if (event.type === "content_block_delta") {
-                const delta = event.delta;
-                if ("text" in delta && delta.text) {
-                  accumulatedText += delta.text;
-                  sendEvent("text", { content: delta.text });
-                } else if ("partial_json" in delta && delta.partial_json && isProcessingTool) {
-                  currentToolInput += delta.partial_json;
-                }
-              } else if (event.type === "content_block_start") {
-                if (event.content_block.type === "tool_use") {
-                  if (!toolUseBlock) {
-                    isProcessingTool = true;
-                    sendEvent("tool_start", { tool: event.content_block.name });
-                    toolUseBlock = {
-                      type: "tool_use",
-                      id: event.content_block.id,
-                      name: event.content_block.name,
-                      input: {},
-                    } as Anthropic.ToolUseBlock;
-                    currentToolInput = "";
+            for await (const chunk of response) {
+              const choice = chunk.choices[0];
+              if (!choice) continue;
+              const delta = choice.delta;
+              if (delta?.content) {
+                accumulatedText += delta.content;
+                sendEvent("text", { content: delta.content });
+              }
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index;
+                  if (!toolCallAcc[idx]) {
+                    toolCallAcc[idx] = { id: "", name: "", args: "", started: false };
                   }
-                }
-              } else if (event.type === "content_block_stop") {
-                if (toolUseBlock && currentToolInput && isProcessingTool) {
-                  try {
-                    toolUseBlock.input = JSON.parse(currentToolInput);
-                  } catch (e) {
-                    console.error(`[SSE] Failed to parse tool input:`, e);
+                  const acc = toolCallAcc[idx];
+                  if (tc.id) acc.id = tc.id;
+                  if (tc.function?.name) {
+                    acc.name = tc.function.name;
+                    if (!acc.started) {
+                      acc.started = true;
+                      sendEvent("tool_start", { tool: acc.name });
+                    }
                   }
-                  isProcessingTool = false;
+                  if (tc.function?.arguments) acc.args += tc.function.arguments;
                 }
               }
             }
 
-            const finalResponse = await response.finalMessage();
+            const toolCalls = Object.values(toolCallAcc).filter((t) => t.name);
 
-            if (toolUseBlock && toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0) {
-              const toolInput = toolUseBlock.input as Record<string, unknown>;
-              const hasValidInput = Object.values(toolInput).some(
-                (v) => v !== undefined && v !== null && v !== ""
-              );
+            if (toolCalls.length > 0) {
+              // Record the assistant turn (any prose + the tool calls it requested).
+              currentMessages.push({
+                role: "assistant",
+                content: accumulatedText || null,
+                tool_calls: toolCalls.map((t) => ({
+                  id: t.id,
+                  type: "function" as const,
+                  function: { name: t.name, arguments: t.args || "{}" },
+                })),
+              });
 
-              if (hasValidInput) {
+              for (const t of toolCalls) {
+                let toolInput: Record<string, unknown> = {};
+                try {
+                  toolInput = JSON.parse(t.args || "{}");
+                } catch (e) {
+                  console.error(`[SSE] Failed to parse tool input for ${t.name}:`, e);
+                }
+
                 let toolResult: string;
-
-                if (toolUseBlock.name === "web_search") {
+                if (t.name === "web_search") {
                   const query = toolInput.query as string;
                   toolResult = await performWebSearch(query);
-                  sendEvent("tool_result", { tool: toolUseBlock.name, data: { result: toolResult } });
-                } else if (toolUseBlock.name === "calculate_credits") {
+                  sendEvent("tool_result", { tool: t.name, data: { result: toolResult } });
+                } else if (t.name === "calculate_credits") {
                   // Deterministic engine computes all costs from the model's design.
                   const artifact = buildCreditArtifact(toolInput);
                   if (!artifact.workloads || artifact.workloads.length === 0) {
-                    // Malformed/empty design — DON'T surface a broken artifact to the UI. Tell the
-                    // model to silently retry (the prompt forbids narrating this to the user).
+                    // Malformed/empty design — DON'T surface a broken artifact. Tell the model to
+                    // silently retry (the prompt forbids narrating this to the user).
                     toolResult =
                       "RETRY_SILENTLY: the workloads array was empty or malformed. Re-call calculate_credits with the complete workloads array. Do NOT mention this retry or any error to the user.";
                   } else {
                     lastCreditArtifact = artifact;
-                    sendEvent("tool_result", { tool: toolUseBlock.name, data: artifact });
+                    sendEvent("tool_result", { tool: t.name, data: artifact });
                     toolResult = JSON.stringify(artifact);
                   }
-                } else if (toolUseBlock.name === "calculate_roi") {
+                } else if (t.name === "calculate_roi") {
                   // Deterministic ROI (incl. residual human cost) so chat prose and panel agree.
-                  // Volume + AI cost derive from the credits artifact for perfect consistency.
                   const artifact = buildRoiArtifact(toolInput, lastCreditArtifact);
-                  sendEvent("tool_result", { tool: toolUseBlock.name, data: artifact });
+                  sendEvent("tool_result", { tool: t.name, data: artifact });
                   toolResult = JSON.stringify(artifact);
                 } else {
-                  sendEvent("tool_result", { tool: toolUseBlock.name, data: toolInput });
+                  sendEvent("tool_result", { tool: t.name, data: toolInput });
                   toolResult = JSON.stringify(toolInput);
                 }
 
-                const contentBlocks: Array<Anthropic.TextBlock | Anthropic.ToolUseBlock> = [];
-                if (accumulatedText) {
-                  contentBlocks.push({ type: "text", text: accumulatedText, citations: [] } as Anthropic.TextBlock);
-                }
-                contentBlocks.push(toolUseBlock);
-
-                currentMessages = [
-                  ...currentMessages,
-                  { role: "assistant" as const, content: contentBlocks },
-                  {
-                    role: "user" as const,
-                    content: [
-                      {
-                        type: "tool_result" as const,
-                        tool_use_id: toolUseBlock.id,
-                        content: toolResult,
-                      },
-                    ],
-                  },
-                ];
-
-                continue;
+                currentMessages.push({
+                  role: "tool",
+                  tool_call_id: t.id,
+                  content: toolResult,
+                });
               }
+
+              continue;
             }
 
-            if (finalResponse.stop_reason === "end_turn" || !toolUseBlock) {
-              break;
-            }
+            // No tool calls this turn → the model has finished its response.
+            break;
           }
 
           sendEvent("done", {});
           controller.close();
         };
 
-        const anthropicMessages: Anthropic.MessageParam[] = messages.map(
-          (m: { role: string; content: string }) => ({
+        const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m: { role: string; content: string }) => ({
             role: m.role as "user" | "assistant",
             content: m.content,
-          })
-        );
+          })),
+        ];
 
-        await runConversationLoop(anthropicMessages);
+        await runConversationLoop(openaiMessages);
       },
     });
 
