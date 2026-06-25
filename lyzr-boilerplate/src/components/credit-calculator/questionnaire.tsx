@@ -232,18 +232,75 @@ export function Questionnaire({ data, onSubmit, isLoading, submittedResponses }:
   );
 }
 
-export function parseQuestionnaire(content: string): QuestionnaireData | null {
-  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
-  if (!jsonMatch) return null;
-  
+function asQuestionnaire(raw: string): QuestionnaireData | null {
   try {
-    const parsed = JSON.parse(jsonMatch[1]);
-    if (parsed.type === "questionnaire" && Array.isArray(parsed.questions)) {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.type === "questionnaire" && Array.isArray(parsed.questions)) {
       return parsed as QuestionnaireData;
     }
   } catch {
-    return null;
+    /* not valid JSON — fall through */
   }
-  
   return null;
+}
+
+/** Extract every top-level {...} object from text, brace-balanced and string-aware. */
+function extractJsonObjects(text: string): string[] {
+  const objs: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        objs.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return objs;
+}
+
+/**
+ * Parse the questionnaire JSON whether or not the model wrapped it in a ```json fence. Anthropic
+ * fenced it; some OpenAI models emit the bare object. We try the fenced block first, then scan the
+ * whole message for any balanced {...} that is a questionnaire — so it renders correctly either way.
+ */
+export function parseQuestionnaire(content: string): QuestionnaireData | null {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced) {
+    const r = asQuestionnaire(fenced[1].trim());
+    if (r) return r;
+  }
+  for (const obj of extractJsonObjects(content)) {
+    const r = asQuestionnaire(obj);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** Remove the questionnaire JSON (fenced or bare) from a message, leaving any surrounding prose. */
+export function stripQuestionnaireJson(content: string): string {
+  // Drop fenced code blocks whose contents are a questionnaire.
+  let out = content.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, (m, inner) =>
+    asQuestionnaire(String(inner).trim()) ? "" : m
+  );
+  // Drop bare (unfenced) questionnaire objects.
+  for (const obj of extractJsonObjects(out)) {
+    if (asQuestionnaire(obj)) out = out.split(obj).join("");
+  }
+  return out.trim();
 }

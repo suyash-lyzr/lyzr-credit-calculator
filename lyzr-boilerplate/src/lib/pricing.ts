@@ -438,17 +438,18 @@ export function computeRoiComparison(i: RoiComparisonInput): {
 
   return {
     comparison: {
-      human_monthly_cost: humanYearly / 12,
-      ai_monthly_cost: aiYearly / 12,
-      monthly_savings: yearlySavings / 12,
-      human_yearly_cost: humanYearly,
-      ai_yearly_cost: aiYearly,
-      ai_platform_yearly_cost: aiPlatformYearly,
-      ai_llm_yearly_cost: aiLlmYearly,
+      // Round money to 2 decimals so quoted figures never show float noise (140833.33333…).
+      human_monthly_cost: round2(humanYearly / 12),
+      ai_monthly_cost: round2(aiYearly / 12),
+      monthly_savings: round2(yearlySavings / 12),
+      human_yearly_cost: round2(humanYearly),
+      ai_yearly_cost: round2(aiYearly),
+      ai_platform_yearly_cost: round2(aiPlatformYearly),
+      ai_llm_yearly_cost: round2(aiLlmYearly),
       ai_llm_is_passthrough: !!i.aiLlmIsPassThrough,
-      residual_human_yearly_cost: residualHumanYearly,
+      residual_human_yearly_cost: round2(residualHumanYearly),
       automation_rate: automationRate,
-      yearly_savings: yearlySavings,
+      yearly_savings: round2(yearlySavings),
       savings_percentage: Math.round(savingsPct * 10) / 10,
       time_savings_percentage: Math.round(timeSavingsPct * 10) / 10,
       payback_period_days: Math.round(paybackDays),

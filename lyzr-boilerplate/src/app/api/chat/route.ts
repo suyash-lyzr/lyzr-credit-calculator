@@ -220,7 +220,7 @@ Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_
   },
   {
     name: "calculate_roi",
-    description: `Provide the DESIGN INPUTS for an ROI comparison (AI cost vs human labor). The SERVER computes the comparison deterministically (yearly costs, residual human cost, net savings, %, payback, roi_percentage) and returns it — DO NOT compute savings/percentages yourself. After the result returns, quote ITS comparison numbers exactly in your chat summary.
+    description: `Provide the DESIGN INPUTS for an ROI comparison (AI cost vs human labor). The SERVER computes the comparison deterministically (yearly costs, residual human cost, net savings, %, payback, roi_percentage) and returns it — DO NOT compute savings/percentages yourself. After the result returns, quote ITS comparison numbers exactly in your chat summary. Format every dollar figure to at most 2 decimal places (e.g. $140,833.33, not $140,833.33333) — never print raw floating-point tails.
 
 Use ai_analysis.cost_per_unit = (Lyzr platform cost + LLM cost paid to the provider) / annual business-unit volume — the ALL-IN cost of the AI solution. The LLM cost is counted EVEN WHEN the customer brings their own model (BYO / pass-through, $0 on the Lyzr bill), because it's still a real cost they pay. The server recomputes this all-in figure deterministically.
 
@@ -424,7 +424,7 @@ NEVER call multiple tools at once. If review returns needs_revision, fix and re-
 ## INTERACTION FLOW
 
 ### STEP 1: Questionnaire (ask once)
-When the user describes a use case, ask the questionnaire below. Tailor the volume unit (tickets / invoices / contracts / messages / documents / leads / calls) to the use case. Volume is MANDATORY.
+When the user describes a use case, ask the questionnaire below. Tailor the volume unit (tickets / invoices / contracts / messages / documents / leads / calls) to the use case. Volume is MANDATORY. Output the questionnaire as a SINGLE JSON object wrapped in a \`\`\`json fenced code block, with NO other prose in that message — the UI parses it into an interactive form.
 
 \`\`\`json
 {

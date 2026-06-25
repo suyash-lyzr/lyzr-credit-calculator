@@ -9,7 +9,7 @@ import { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Streamdown } from "streamdown";
 import Image from "next/image";
-import { Questionnaire, parseQuestionnaire } from "./questionnaire";
+import { Questionnaire, parseQuestionnaire, stripQuestionnaireJson } from "./questionnaire";
 
 const LYZR_ICON = "https://cdn2.futurepedia.io/2024-09-18T20-25-23.994Z-lyyk.png?w=256";
 const LYZR_LOGO = "https://s3-us-west-2.amazonaws.com/cbi-image-service-prd/original/ed9b933b-bc18-4619-8e8a-e273334b8b34.png";
@@ -28,8 +28,11 @@ interface ChatInterfaceProps {
   hasArtifacts?: boolean;
 }
 
+// Strip the questionnaire JSON (fenced OR bare) so the raw object never renders as text — the
+// interactive Questionnaire component renders it instead. (Anthropic fenced it; some OpenAI models
+// emit the bare object.)
 function removeQuestionnaireJson(content: string): string {
-  return content.replace(/```json\s*\{[\s\S]*?"type":\s*"questionnaire"[\s\S]*?\}\s*```/g, '').trim();
+  return stripQuestionnaireJson(content);
 }
 
 // The model sometimes glues a markdown heading onto the end of a sentence
@@ -51,18 +54,17 @@ function normalizeMarkdown(content: string): string {
 }
 
 function isStreamingQuestionnaire(content: string): boolean {
-  const jsonStart = content.includes('```json') && content.includes('"type"');
+  // Works whether the model fences the JSON (```json) or emits the bare object ({ "type": ... }).
+  const hasJsonStart = content.includes('```json') || /\{\s*"type"/.test(content) || content.trimStart().startsWith('{');
   const hasQuestionnaireMarker = content.includes('"questionnaire"') || content.includes('"questions"');
-  const isIncomplete = !content.includes('```\n') || (content.match(/```/g) || []).length < 2;
-  return jsonStart && (hasQuestionnaireMarker || isIncomplete);
+  return hasJsonStart && hasQuestionnaireMarker;
 }
 
 function getPreQuestionnaireText(content: string): string {
-  const jsonIndex = content.indexOf('```json');
-  if (jsonIndex > 0) {
-    return content.substring(0, jsonIndex).trim();
-  }
-  return '';
+  // Text before the questionnaire JSON, whether fenced or bare.
+  const candidates = [content.indexOf('```json'), content.search(/\{\s*"type"/)].filter((i) => i > 0);
+  if (candidates.length === 0) return '';
+  return content.substring(0, Math.min(...candidates)).trim();
 }
 
 export function ChatInterface({
