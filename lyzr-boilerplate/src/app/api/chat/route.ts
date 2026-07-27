@@ -5,6 +5,10 @@ import { computeTotals, computeRoiComparison, type Deployment, type WorkloadInpu
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// The full turn (architecture + 4 tool calls) can run long on gpt-5.5; without this the Vercel
+// function times out mid-stream and the chat "stops in between". 300s needs a Pro plan; Hobby caps
+// at 60s — Vercel clamps to the plan max, so this is safe either way.
+export const maxDuration = 300;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -111,10 +115,11 @@ PLATFORM COST is metered in APCs (Agent Processing Credits). 1 APC = 1 token. AP
 - VPC / On-Prem (vpc): $5 per 1,000,000 APCs.
 => The SAME token estimates you give in llm_calls drive BOTH the platform APC cost AND the LLM pass-through cost. Estimate tokens realistically and FULLY — under-counting input tokens under-prices the platform.
 
-Reference APC/run profiles — sanity-check each workload's per-run total against these:
+Reference APC/run profiles — a SANITY RANGE, NOT a target. Base APCs on realistic per-call token counts (below); do NOT inflate tokens to "reach" a profile:
 - Single agent: ~15,000 APCs (typical) to ~50,000 (heavy: large retrieved context, long docs, multi-step tools).
-- Multi-agent (manager + workers, or a multi-node Superflow): ~100,000 APCs (typical) to ~300,000 (deep retrieval, iteration loops, many model calls).
-There is no more "complexity tier rate" and no node/sub-agent band — a run costs whatever tokens it actually consumes. Complexity still matters because it drives how many calls and how much context a run needs (more agents/nodes -> more APCs).
+- Multi-agent (manager + 4-6 workers, or a Superflow with MANY LLM nodes / iteration loops): ~100,000 to ~300,000. This range applies only when there are genuinely many model calls (8-12+) or very large contexts.
+CRITICAL: the multi-agent range assumes MANY calls. A Superflow with only a few LLM nodes (e.g. 3 calls) is SINGLE-AGENT-SIZED in APCs (~15,000-40,000) — that is correct and expected; do NOT push it to 100K+ just because it's a Superflow. APCs = actual tokens, independent of orchestration shape. Keep estimates STABLE and realistic: a routine support/chat/extraction call is a few thousand input tokens, not tens of thousands.
+There is no complexity-tier rate and no node/sub-agent band — a run costs whatever tokens it consumes.
 
 RUNS — estimate runs_per_period (ANNUAL) per workload from the user's volume:
 - Chat: 1 run per user message. Ongoing monthly volume x 12. Backlog: the one-time count.
@@ -140,7 +145,7 @@ Cost matters — default to the CHEAPEST model that clears the node's quality ba
 - LONG-CONTEXT (very large documents): gemini-2.5-pro, gemini-3.1-pro-preview.
 Rule of thumb: don't put Opus on a node a cheap model handles (wastes money), and don't put a cheap model on a node that genuinely needs reasoning or quality (loses trust). Example mix in one Superflow: gpt-5.4-mini to classify -> sonar-pro to research -> claude-sonnet-4-6 to draft the hard part -> gpt-5.4-mini to format/log.
 
-Token estimates per call (input_tokens INCLUDE full context — system prompt, tool defs, history, retrieved docs): routing/classify 800/150 · chat+KB/RAG 4000/600 · doc field-extraction 8000/1200 · planning/reasoning 6000/1500 · long-doc 15000/2000. Then sanity-check the run's SUMMED APCs against the reference profiles (single ~15K–50K, multi-agent ~100K–300K).
+Token estimates per call (input_tokens INCLUDE full context — system prompt, tool defs, history, retrieved docs — but stay REALISTIC): routing/classify 800/150 · chat+KB/RAG 4,000/600 · doc field-extraction 8,000/1,200 · planning/reasoning 6,000/1,500 · long-doc 15,000/2,000. A KB/RAG call that pulls a few articles is ~3,000-8,000 input — only exceed ~15,000 input for genuinely long documents, and only reach 40,000+ for very large files. Do NOT put 30k-60k input on a routine support/chat/classification call. Use these consistently so re-running the SAME use case yields the SAME estimate.
 
 Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_architecture_summary. The workload NAMES should match generate_architecture.`,
     input_schema: {

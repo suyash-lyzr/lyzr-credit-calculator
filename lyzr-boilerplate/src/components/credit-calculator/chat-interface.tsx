@@ -271,6 +271,15 @@ export function ChatInterface({
               </div>
             </div>
           )}
+
+          {/* Persistent "still working" indicator — stays visible even while the model pauses to run
+              the credits/ROI tools (when no new text is streaming), so it never looks frozen. */}
+          {isLoading && streamingContent && !isStreamingQuestionnaire(streamingContent) && (
+            <div className="flex items-center gap-2 pl-11 text-muted-foreground">
+              <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="text-xs">Building your estimate — architecture, credits &amp; ROI…</span>
+            </div>
+          )}
         </div>
       </div>
 
