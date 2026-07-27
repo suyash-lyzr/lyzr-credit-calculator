@@ -18,39 +18,52 @@ export const DEPLOYMENT_LABEL: Record<Deployment, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Platform rate card (USD per run, by deployment)
+// APC (Agent Processing Credit) platform pricing
 // ---------------------------------------------------------------------------
+// 1 APC = 1 token (input + output + reasoning + tool/context — everything a model call consumes).
+// Platform cost is metered on APCs; only the rate changes by deployment. LLM cost is SEPARATE
+// (pass-through / BYO), computed further below.
 
-/** Simple / Single Agent — flat per run. */
-export const SIMPLE_RATE: Record<Deployment, number> = { cloud: 0.06, vpc: 0.03 };
+/** Platform rate in USD per 1,000,000 APCs (the per-million-token framing the market uses). */
+export const APC_RATE_PER_M: Record<Deployment, number> = { cloud: 20, vpc: 5 }; // SaaS $20/M · VPC $5/M
 
-export interface Band {
-  min: number;
-  max: number; // inclusive; Infinity for the top band
-  cloud: number;
-  vpc: number;
-  label: string;
+/** Platform rate in USD per single APC (token). */
+export const apcRatePerToken = (dep: Deployment): number => APC_RATE_PER_M[dep] / 1_000_000;
+
+/** A standard capacity plan — the annual price buys an annual APC (token) capacity. */
+export interface PlanTier {
+  name: string;
+  price: number; // annual USD
+  capacityApc: number; // annual APC (token) capacity
+  note?: string;
 }
 
-/** Intermediate / Manager — banded by sub-agents executed at runtime. */
-export const MANAGER_BANDS: Band[] = [
-  { min: 1, max: 4, cloud: 0.18, vpc: 0.09, label: "1–4 sub-agents" },
-  { min: 5, max: 8, cloud: 0.36, vpc: 0.18, label: "5–8 sub-agents" },
-  { min: 9, max: Infinity, cloud: 0.54, vpc: 0.27, label: "≥9 sub-agents" },
+/** VPC plans. Studio Enterprise is the default; Lite/Scale are exceptions for smaller deals. */
+export const VPC_TIERS: PlanTier[] = [
+  { name: "Studio Lite", price: 50_000, capacityApc: 10e9, note: "Entry point · limited features" },
+  { name: "Studio Scale", price: 125_000, capacityApc: 25e9, note: "Specific cases only" },
+  { name: "Studio Enterprise", price: 250_000, capacityApc: 50e9, note: "Default way to begin" },
+  { name: "Studio Enterprise (100B)", price: 500_000, capacityApc: 100e9, note: "Large enterprise" },
 ];
 
-/** Complex / Superflow — banded by nodes executed at runtime (first 30). */
-export const SUPERFLOW_BANDS: Band[] = [
-  { min: 1, max: 10, cloud: 0.3, vpc: 0.18, label: "1–10 nodes" },
-  { min: 11, max: 20, cloud: 0.6, vpc: 0.36, label: "11–20 nodes" },
-  { min: 21, max: 30, cloud: 0.9, vpc: 0.54, label: "21–30 nodes" },
+/** SaaS (Lyzr-hosted) plans. */
+export const SAAS_TIERS: PlanTier[] = [
+  { name: "Standard", price: 100_000, capacityApc: 5e9, note: "Default SaaS entry point" },
+  { name: "Standard (10B)", price: 200_000, capacityApc: 10e9, note: "For larger estimates" },
 ];
-/** Beyond 30 nodes: 21–30 base price + per-node increment for each node over 30. */
-export const SUPERFLOW_BASE_OVER_30: Record<Deployment, number> = { cloud: 0.9, vpc: 0.54 };
-export const SUPERFLOW_PER_NODE_OVER_30: Record<Deployment, number> = { cloud: 0.02, vpc: 0.01 };
 
-/** Voice — per minute. */
-export const VOICE_RATE_PER_MIN: Record<Deployment, number> = { cloud: 0.09, vpc: 0.06 };
+/** Strategic (Fortune-50 scale, usage-heavy): Unlimited Credits, leadership sign-off. */
+export const STRATEGIC_MIN_PRICE = 500_000;
+
+export function tiersFor(dep: Deployment): PlanTier[] {
+  return dep === "vpc" ? VPC_TIERS : SAAS_TIERS;
+}
+
+/** Per-run APC reference profiles from the APC guide — used to sanity-check estimates, not to price. */
+export const APC_PROFILES = {
+  single: { p50: 15_000, p95: 50_000 }, // single agent (typical / heavy)
+  multi: { p50: 100_000, p95: 300_000 }, // manager / superflow orchestration
+};
 
 // ---------------------------------------------------------------------------
 // Rounding helpers
@@ -60,109 +73,49 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const round6 = (n: number) => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
 
 // ---------------------------------------------------------------------------
-// Platform price-per-run
+// APC per run + tier recommendation
 // ---------------------------------------------------------------------------
 
-function findBand(bands: Band[], n: number): Band {
-  const v = Math.max(1, Math.floor(n));
-  return bands.find((b) => v >= b.min && v <= b.max) ?? bands[bands.length - 1];
-}
-
-function nodeBandLabel(nodes: number): string {
-  if (nodes <= 30) return findBand(SUPERFLOW_BANDS, nodes).label;
-  return `>30 nodes (${nodes - 30} over)`;
-}
-
-/** Price of one Superflow execution given the nodes executed in that single flow (no nesting). */
-export function superflowNodePrice(nodes: number, dep: Deployment): number {
-  const n = Math.max(0, Math.floor(nodes));
-  if (n === 0) return 0;
-  if (n <= 30) return findBand(SUPERFLOW_BANDS, n)[dep];
-  return round2(SUPERFLOW_BASE_OVER_30[dep] + (n - 30) * SUPERFLOW_PER_NODE_OVER_30[dep]);
-}
-
-/** One possible runtime path through a Superflow + how often it's taken. */
-export interface ExecutionPath {
-  nodes_executed: number;
-  probability: number; // relative weight; the engine normalizes these to sum to 1
-}
-
+/** The design inputs that describe how a workload runs (only complexity matters for APC labeling). */
 export interface RuntimeProfile {
   complexity: Complexity;
-  sub_agents_executed?: number; // intermediate
-  nodes_executed?: number; // complex (primary flow) — used when execution_paths is absent
-  // complex: when branches land in DIFFERENT node bands (e.g. a short auto path vs a long
-  // human-review path), list each path so the engine blends the per-run price by probability
-  // instead of forcing one averaged node count into a single band.
-  execution_paths?: ExecutionPath[];
-  nested_superflow_node_counts?: number[]; // complex (each nested superflow's own node count)
-  voice_minutes_per_run?: number; // voice
 }
 
-export interface PricePerRun {
-  price_per_run: number;
-  band_label: string;
+/** Which reference profile a workload maps to — single vs multi-agent orchestration. */
+function profileKind(c: Complexity): "single" | "multi" {
+  return c === "intermediate" || c === "complex" ? "multi" : "single";
 }
 
-/** Resolve the platform price for ONE run of a workload, by tier + runtime band. */
-export function pricePerRun(p: RuntimeProfile, dep: Deployment): PricePerRun {
-  switch (p.complexity) {
-    case "simple":
-      return { price_per_run: SIMPLE_RATE[dep], band_label: "Single Agent (flat)" };
+/** A short label placing the run's APC/token usage against the P50/P95 reference band. */
+export function apcProfileLabel(c: Complexity, apcPerRun: number): string {
+  const p = APC_PROFILES[profileKind(c)];
+  const kind = profileKind(c) === "multi" ? "multi-agent" : "single-agent";
+  if (apcPerRun <= p.p50 * 1.34) return `${kind} · ~P50`;
+  if (apcPerRun <= p.p95 * 1.2) return `${kind} · ~P95`;
+  return `${kind} · above P95`;
+}
 
-    case "intermediate": {
-      const band = findBand(MANAGER_BANDS, p.sub_agents_executed ?? 1);
-      return { price_per_run: band[dep], band_label: `Manager · ${band.label}` };
-    }
+export interface TierRecommendation {
+  deployment: Deployment;
+  tier: PlanTier | null; // smallest standard tier whose capacity covers annual APC; null if strategic
+  strategic: boolean; // annual APC exceeds the largest standard tier -> route to leadership
+  capacity_used_pct: number; // annual APC / tier capacity * 100 (0 if strategic)
+  annual_apc: number;
+}
 
-    case "complex": {
-      const nested = (p.nested_superflow_node_counts ?? []).filter((n) => n > 0);
-      const nestedPrice = nested.reduce((s, nn) => s + superflowNodePrice(nn, dep), 0);
-      const nestedLabel = nested.length
-        ? ` + ${nested.length} nested superflow${nested.length > 1 ? "s" : ""}`
-        : "";
-
-      // Band-straddling: if the model supplied multiple execution paths, blend the per-run price
-      // by probability so paths in different bands are priced correctly (not averaged into one).
-      const paths = (p.execution_paths ?? []).filter(
-        (ep) => ep.nodes_executed > 0 && ep.probability > 0
-      );
-      if (paths.length >= 2) {
-        const totalProb = paths.reduce((s, ep) => s + ep.probability, 0) || 1;
-        const blended = paths.reduce(
-          (s, ep) => s + superflowNodePrice(ep.nodes_executed, dep) * (ep.probability / totalProb),
-          0
-        );
-        const bandsHit = Array.from(
-          new Set(
-            [...paths]
-              .sort((a, b) => a.nodes_executed - b.nodes_executed)
-              .map((ep) => nodeBandLabel(ep.nodes_executed))
-          )
-        );
-        // Only call it "blended" when the paths actually span DIFFERENT bands; if they all land in
-        // one band the price is identical, so show that single band (clearer for the user).
-        const label =
-          bandsHit.length === 1
-            ? `Superflow · ${bandsHit[0]}` + nestedLabel
-            : `Superflow · blended ${paths.length} paths (${bandsHit.join(", ")})` + nestedLabel;
-        return { price_per_run: round2(blended + nestedPrice), band_label: label };
-      }
-
-      const primary = Math.max(1, Math.floor(p.nodes_executed ?? 1));
-      const total = superflowNodePrice(primary, dep) + nestedPrice;
-      const label = `Superflow · ${nodeBandLabel(primary)}` + nestedLabel;
-      return { price_per_run: round2(total), band_label: label };
-    }
-
-    case "voice": {
-      const mins = Math.max(0, p.voice_minutes_per_run ?? 0);
-      return {
-        price_per_run: round2(mins * VOICE_RATE_PER_MIN[dep]),
-        band_label: `Voice · ${mins} min/run @ $${VOICE_RATE_PER_MIN[dep].toFixed(2)}/min`,
-      };
-    }
-  }
+/** Recommend the smallest standard plan whose capacity covers the year's APCs (else: strategic). */
+export function recommendTier(annualApc: number, dep: Deployment): TierRecommendation {
+  const tiers = tiersFor(dep);
+  const top = tiers[tiers.length - 1];
+  const strategic = annualApc > top.capacityApc;
+  const tier = strategic ? null : tiers.find((t) => annualApc <= t.capacityApc) ?? top;
+  return {
+    deployment: dep,
+    tier,
+    strategic,
+    capacity_used_pct: tier ? round2((annualApc / tier.capacityApc) * 100) : 0,
+    annual_apc: annualApc,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -316,10 +269,11 @@ export interface WorkloadCost {
   name: string;
   complexity: Complexity;
   reasoning?: string;
-  band_label: string;
-  price_per_run: number;
+  apc_per_run: number; // Σ(input + output) tokens across all model calls in one run
+  annual_apc: number; // apc_per_run × runs_per_period
+  apc_profile_label: string; // e.g. "single-agent · ~P50" (sanity vs reference profiles)
   runs_per_period: number;
-  platform_cost: number;
+  platform_cost: number; // annual_apc × APC rate for the deployment
   llm_cost_per_run: number; // sum of llm_calls cost for one run
   llm_cost: number; // annual LLM cost on the Lyzr bill (0 when BYO)
   llm_cost_external: number; // annual LLM cost paid to provider regardless of BYO (for display)
@@ -328,10 +282,19 @@ export interface WorkloadCost {
   llm_calls: Array<LlmCallInput & { cost_per_call: number }>;
 }
 
-/** Compute the full cost breakdown for one workload. */
+/** Σ(input + output) tokens across all model calls in ONE run = the APCs that run consumes. */
+export function apcPerRun(w: Pick<WorkloadInput, "llm_calls">): number {
+  return (w.llm_calls ?? []).reduce(
+    (s, c) => s + Math.max(0, c.input_tokens || 0) + Math.max(0, c.output_tokens || 0),
+    0
+  );
+}
+
+/** Compute the full cost breakdown for one workload (platform = APCs × rate). */
 export function computeWorkload(w: WorkloadInput, dep: Deployment): WorkloadCost {
-  const { price_per_run, band_label } = pricePerRun(w, dep);
-  const platform_cost = round2(price_per_run * w.runs_per_period);
+  const apc_per_run = apcPerRun(w);
+  const annual_apc = apc_per_run * Math.max(0, w.runs_per_period);
+  const platform_cost = round2(annual_apc * apcRatePerToken(dep));
 
   const calls = (w.llm_calls ?? []).map((c) => ({ ...c, cost_per_call: llmCallCost(c) }));
   const llm_cost_per_run = round6(calls.reduce((s, c) => s + c.cost_per_call, 0));
@@ -343,8 +306,9 @@ export function computeWorkload(w: WorkloadInput, dep: Deployment): WorkloadCost
     name: w.name,
     complexity: w.complexity,
     reasoning: w.reasoning,
-    band_label,
-    price_per_run,
+    apc_per_run,
+    annual_apc,
+    apc_profile_label: apcProfileLabel(w.complexity, apc_per_run),
     runs_per_period: w.runs_per_period,
     platform_cost,
     llm_cost_per_run,
@@ -359,10 +323,13 @@ export function computeWorkload(w: WorkloadInput, dep: Deployment): WorkloadCost
 export interface CostTotals {
   deployment: Deployment;
   workloads: WorkloadCost[];
-  platform_annual_cost: number;
+  total_annual_apc: number; // Σ annual APCs across workloads
+  apc_rate_per_m: number; // $/1M APC for this deployment
+  platform_annual_cost: number; // = total_annual_apc × rate
   llm_annual_cost: number; // on the Lyzr bill (excludes BYO)
   llm_annual_cost_external: number; // paid to providers (includes BYO)
   total_annual_cost: number;
+  recommended_tier: TierRecommendation; // smallest plan that fits, or strategic flag
 }
 
 // ---------------------------------------------------------------------------
@@ -460,18 +427,22 @@ export function computeRoiComparison(i: RoiComparisonInput): {
   };
 }
 
-/** Compute costs for all workloads and roll up the totals. */
+/** Compute costs for all workloads and roll up the totals (platform metered on APCs). */
 export function computeTotals(workloads: WorkloadInput[], dep: Deployment): CostTotals {
   const computed = workloads.map((w) => computeWorkload(w, dep));
+  const total_annual_apc = computed.reduce((s, w) => s + w.annual_apc, 0);
   const platform_annual_cost = round2(computed.reduce((s, w) => s + w.platform_cost, 0));
   const llm_annual_cost = round2(computed.reduce((s, w) => s + w.llm_cost, 0));
   const llm_annual_cost_external = round2(computed.reduce((s, w) => s + w.llm_cost_external, 0));
   return {
     deployment: dep,
     workloads: computed,
+    total_annual_apc,
+    apc_rate_per_m: APC_RATE_PER_M[dep],
     platform_annual_cost,
     llm_annual_cost,
     llm_annual_cost_external,
     total_annual_cost: round2(platform_annual_cost + llm_annual_cost),
+    recommended_tier: recommendTier(total_annual_apc, dep),
   };
 }

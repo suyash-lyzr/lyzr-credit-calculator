@@ -106,31 +106,27 @@ Always justify the cheapest pattern and NAME the capability that forces any esca
 
 Total Cost = Lyzr Platform Cost + LLM Cost.
 
-PLATFORM COST depends on two things only — number of runs x complexity tier:
-- A RUN = one execution request (one chat message, one pipeline fire, one schedule tick). A manager calling 5 sub-agents = 1 run. A Superflow with 12 nodes = 1 run. Scheduled daily for a year = 365 runs.
-- Tier price per run (server applies it):
-  - Simple (Single Agent): flat — $0.06 SaaS / $0.03 on-prem.
-  - Intermediate (Manager): by sub_agents_executed — 1-4 / 5-8 / >=9.
-  - Complex (Superflow): by nodes_executed — 1-10 / 11-20 / 21-30 / >30 (incremental). Loops x N, only the taken branch, retries, and AI-swarm spawns all COUNT as nodes executed. Nested superflows: list each one's node count.
-  - Voice: per minute.
+PLATFORM COST is metered in APCs (Agent Processing Credits). 1 APC = 1 token. APCs per run = the SUM of (input_tokens + output_tokens) across EVERY model call in ONE run — everything a model reads and writes: system prompt, tool/function definitions, conversation history, retrieved KB/RAG documents, prior tool results, plus the model's output. Platform cost = total annual APCs x the deployment rate:
+- SaaS (cloud): $20 per 1,000,000 APCs.
+- VPC / On-Prem (vpc): $5 per 1,000,000 APCs.
+=> The SAME token estimates you give in llm_calls drive BOTH the platform APC cost AND the LLM pass-through cost. Estimate tokens realistically and FULLY — under-counting input tokens under-prices the platform.
 
-RUNTIME DRIVERS you must estimate (these set the band):
-- sub_agents_executed: for a Manager, how many sub-agents actually run per request (executed, not configured).
-- nodes_executed: for a Superflow, how many nodes fire on the path actually taken per run (count loops x iterations, only the branch taken, retries, swarm spawns).
-- execution_paths (band-straddling): if a Superflow's branches land in DIFFERENT node bands (e.g. a short auto-resolve path of 8 nodes vs a long human-review path of 14 nodes), DON'T average them into one nodes_executed — instead provide execution_paths = [{nodes_executed, probability}, ...] and the server blends the price by probability. Use plain nodes_executed only when every path is in the same band.
-- nested_superflow_node_counts: if a Superflow calls other Superflows, list each child's node count.
-- voice_minutes_per_run: for Voice.
+Reference APC/run profiles — sanity-check each workload's per-run total against these:
+- Single agent: ~15,000 APCs (typical) to ~50,000 (heavy: large retrieved context, long docs, multi-step tools).
+- Multi-agent (manager + workers, or a multi-node Superflow): ~100,000 APCs (typical) to ~300,000 (deep retrieval, iteration loops, many model calls).
+There is no more "complexity tier rate" and no node/sub-agent band — a run costs whatever tokens it actually consumes. Complexity still matters because it drives how many calls and how much context a run needs (more agents/nodes -> more APCs).
 
 RUNS — estimate runs_per_period (ANNUAL) per workload from the user's volume:
 - Chat: 1 run per user message. Ongoing monthly volume x 12. Backlog: the one-time count.
-- Be realistic about the true funnel of work (rework that RE-TRIGGERS the whole workflow adds runs; rework that loops INSIDE one run raises nodes_executed, not runs).
+- A manager calling 5 sub-agents = 1 run; a Superflow with 12 nodes = 1 run; scheduled daily for a year = 365 runs. Rework that RE-TRIGGERS the whole workflow adds runs; rework that loops INSIDE one run adds model calls (more APCs/run), not runs.
 - Each workload has its OWN volume — split the user's stated usage across workloads and explain in runs_rationale.
 
-LLM COST (separate, pass-through, no markup) — provide llm_calls = the LLM-bearing executions in ONE run of the workload:
+LLM COST (separate, pass-through, no markup) — provide llm_calls = the LLM-bearing executions in ONE run of the workload. These SAME calls also define the run's APCs:
 - Single Agent: ~1 call/run for pure Q&A; ~2 calls/run if it uses a tool or KB (one call to decide/use the tool, one to finalize) — count realistically.
 - Manager: manager call + one per sub-agent executed.
-- Superflow: one per LLM / AI-Agent / AI-Swarm node executed (x loop iterations). Non-LLM nodes (Code, HTTP, If, Set, Approval) have NO llm_calls.
-- For each call give: label (the node/agent name), node_type (the REAL Superflow node type that makes the call — use ONLY: "AI Agent", "LLM", "AI Swarm", "A2A Agent", "Extract Fields", or "Label Document"; for a standalone Single Agent or Manager workload use "AI Agent"; never invent a node type), purpose (ONE short line on what the node does), model (from the real Studio catalog), provider, model_rationale (ONE short line on WHY this model fits this node — tie it to the node's job, e.g. "Cheapest router-class model — narrow classification fits it easily" / "Strong structured extraction with reliable instruction-following at low cost"), input_tokens, output_tokens. Pick the CHEAPEST model that clears the quality bar; MIX models across nodes. The server looks up the rate. Keep purpose and model_rationale to a single concise line each.
+- Superflow: one per LLM / AI-Agent / AI-Swarm node executed (x loop iterations). Non-LLM nodes (Code, HTTP, If, Set, Approval) make NO model call — no llm_call and NO APCs.
+- Voice: count the STT / LLM / TTS model calls per run; they consume APCs like any other tokens (there is no separate per-minute rate anymore).
+- For each call give: label (the node/agent name), node_type (the REAL Superflow node type that makes the call — use ONLY: "AI Agent", "LLM", "AI Swarm", "A2A Agent", "Extract Fields", or "Label Document"; for a standalone Single Agent or Manager workload use "AI Agent"; never invent a node type), purpose (ONE short line on what the node does), model (from the real Studio catalog), provider, model_rationale (ONE short line on WHY this model fits this node), input_tokens, output_tokens. input_tokens MUST include the FULL context the model actually reads (system prompt + tool defs + history + retrieved docs + prior tool results), not just the user's message. Pick the CHEAPEST model that clears the quality bar; MIX models across nodes. Keep purpose and model_rationale to a single concise line each.
 - RESEARCH / WEB-SEARCH NODES: if a node does live web research, news lookup, web search, or fetches up-to-date external information, it MUST use a research-capable model with built-in web access — Perplexity "sonar" (cheap) or "sonar-pro" (higher quality), or "sonar-reasoning-pro" / "sonar-deep-research" for heavier research. A plain chat model like gpt-4o-mini or gemini-2.5-flash CANNOT search the web on its own, so do NOT use it for the search/research step. (If the customer specifically wants Claude/GPT with web search, claude-sonnet-4-6 or gpt-5 with web search is acceptable; default to Perplexity Sonar for pure research.)
 - byo_model: true if the customer brings their own model (then LLM cost is $0 on the Lyzr bill).
 
@@ -144,7 +140,7 @@ Cost matters — default to the CHEAPEST model that clears the node's quality ba
 - LONG-CONTEXT (very large documents): gemini-2.5-pro, gemini-3.1-pro-preview.
 Rule of thumb: don't put Opus on a node a cheap model handles (wastes money), and don't put a cheap model on a node that genuinely needs reasoning or quality (loses trust). Example mix in one Superflow: gpt-5.4-mini to classify -> sonar-pro to research -> claude-sonnet-4-6 to draft the hard part -> gpt-5.4-mini to format/log.
 
-Token estimates per call by task type: routing 600/150 · chat/RAG 2000/500 · planning 4500/1200 · long-doc 10000/1500 · very-long 50000/2000.
+Token estimates per call (input_tokens INCLUDE full context — system prompt, tool defs, history, retrieved docs): routing/classify 800/150 · chat+KB/RAG 4000/600 · doc field-extraction 8000/1200 · planning/reasoning 6000/1500 · long-doc 15000/2000. Then sanity-check the run's SUMMED APCs against the reference profiles (single ~15K–50K, multi-agent ~100K–300K).
 
 Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_architecture_summary. The workload NAMES should match generate_architecture.`,
     input_schema: {
@@ -159,24 +155,8 @@ Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_
             type: "object",
             properties: {
               name: { type: "string" },
-              complexity: { type: "string", enum: ["simple", "intermediate", "complex", "voice"] },
-              reasoning: { type: "string", description: "Why this tier" },
-              sub_agents_executed: { type: "number", description: "Manager only: sub-agents executed per run" },
-              nodes_executed: { type: "number", description: "Superflow only: nodes executed on the path taken per run (loops x N, taken branch, retries, swarm spawns). Use this for the typical path when all branches land in the SAME node band." },
-              execution_paths: {
-                type: "array",
-                description: "Superflow only, OPTIONAL: use INSTEAD of nodes_executed when branches land in DIFFERENT node bands (e.g. a short 8-node auto path vs a long 14-node human-review path). List each path; the server blends the per-run price by probability. Omit when one band covers all paths.",
-                items: {
-                  type: "object",
-                  properties: {
-                    nodes_executed: { type: "number", description: "Nodes executed on this path" },
-                    probability: { type: "number", description: "Relative likelihood of this path (0-1; the server normalizes)" },
-                  },
-                  required: ["nodes_executed", "probability"],
-                },
-              },
-              nested_superflow_node_counts: { type: "array", items: { type: "number" }, description: "Superflow only: node count of each nested superflow invoked" },
-              voice_minutes_per_run: { type: "number", description: "Voice only: minutes per run" },
+              complexity: { type: "string", enum: ["simple", "intermediate", "complex", "voice"], description: "Orchestration shape (for the architecture + APC sanity-check); it no longer sets a rate." },
+              reasoning: { type: "string", description: "Why this orchestration shape" },
               runs_per_period: { type: "number", description: "ANNUAL runs for this workload" },
               runs_rationale: { type: "string", description: "How runs_per_period was derived (volume, frequency, funnel, split across workloads)" },
               byo_model: { type: "boolean", description: "True if customer brings own model for this workload (LLM cost $0 on Lyzr bill)" },
@@ -315,12 +295,12 @@ TIME SAVINGS must reflect the reduction in HUMAN effort, not AI compute latency.
   },
   {
     name: "review_and_validate",
-    description: `Quality-check all artifacts against the new complexity-tier pricing model.
+    description: `Quality-check all artifacts against the APC (Agent Processing Credit) pricing model.
 
 Checks:
-1. Orchestration: each workload is the CHEAPEST tier that does the job; any Manager/Superflow escalation names the capability that forced it. Superflow only when a special node is needed (approval, If/Switch/Loop/Filter, HTTP/Code/Parse, AI Swarm, durable waits, fixed pipeline) — NOT merely because of a schedule.
-2. Runtime bands: sub_agents_executed / nodes_executed are realistic (executed, not configured); loops/retries/swarm spawns counted in nodes_executed; nested superflows listed.
-3. Runs: runs_per_period realistic per workload; chat = 1 run/message; scheduled fires counted; rework that re-triggers adds runs (not nodes).
+1. Orchestration: each workload classified correctly (the classification names the capability that forced a Manager/Superflow). Superflow only when a special node is needed (approval, If/Switch/Loop/Filter, HTTP/Code/Parse, AI Swarm, durable waits, fixed pipeline) — NOT merely because of a schedule.
+2. APCs: each run's APCs = Σ(input+output) across its model calls; input_tokens include full context (system prompt, tool defs, history, retrieved docs); per-run totals are realistic vs the reference profiles (single ~15K–50K, multi-agent ~100K–300K). Not under-counted.
+3. Runs: runs_per_period realistic per workload; chat = 1 run/message; scheduled fires counted; rework that re-triggers adds runs (looping inside one run adds APCs, not runs).
 4. LLM: llm_calls present for every LLM-bearing execution; models from the real catalog; cheapest-that-clears-the-bar; mixed across nodes; tokens reasonable. LLM tied to executions, not run count.
 5. Deployment correct (cloud/vpc). BYO flag correct.
 6. ROI: ai cost_per_unit = all-in (Lyzr platform + LLM paid to provider incl. BYO) / unit volume; savings computed against the all-in cost and plausible; LLM shown as pass-through. HITL CONSISTENCY: if any workload has a human node (Wait-for-Approval / review / escalation / confidence gate to a person), automation_rate MUST be < 1 and residual_human_minutes_per_unit > 0 — flag as critical if the ROI claims 100% automation while the architecture shows a human node. Conversely a fully autonomous design must have automation_rate = 1.
@@ -360,34 +340,33 @@ const openaiTools: OpenAI.Chat.Completions.ChatCompletionTool[] = tools.map((t) 
   },
 }));
 
-const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that estimates the cost of running AI agents on Lyzr using the COMPLEXITY-TIER pricing model. Be conversational but precise.
+const systemPrompt = `You are the Lyzr Credit Calculator, a Business Value Engineer that estimates the cost of running AI agents on Lyzr using the APC (Agent Processing Credit) pricing model — platform cost is metered in tokens (1 APC = 1 token). Be conversational but precise.
 
 ## ========== PRICING MODEL ==========
 
 Total Cost = Lyzr Platform Cost + LLM Cost.
 
-Lyzr Platform Cost depends on exactly two things: NUMBER OF RUNS x COMPLEXITY TIER.
-LLM Cost is pass-through to the model provider at public rates, NO markup (and $0 on the Lyzr bill if the customer brings their own model).
+Lyzr Platform Cost is metered in APCs (Agent Processing Credits): 1 APC = 1 token, and platform cost = total annual APCs x the deployment rate (SaaS $20/M · VPC/On-Prem $5/M). APCs per run = the SUM of (input + output) tokens across every model call in one run.
+LLM Cost is pass-through to the model provider at public rates, NO markup (and $0 on the Lyzr bill if the customer brings their own model — the platform APC cost still applies).
 
 ### What is a RUN
 One run = one execution request — one invocation/trigger of a workload — regardless of how much happens inside it.
 - One chat message = 1 run. A manager calling 5 sub-agents for one request = 1 run. A Superflow with 12 nodes executed once = 1 run. Scheduled daily for a year = 365 runs. An HITL pause does not split a run.
-- Rework: re-triggering the WHOLE workflow = +1 run; looping/retrying INSIDE one execution = more nodes_executed (higher band), still 1 run.
+- Rework: re-triggering the WHOLE workflow = +1 run; looping/retrying INSIDE one execution = more model calls (more APCs/run), still 1 run.
 
-### Complexity tiers and rates (per run; SaaS / On-Prem)
-- Simple / Single Agent: $0.06 / $0.03 (flat).
-- Intermediate / Manager: by sub-agents executed — 1-4 $0.18/$0.09 · 5-8 $0.36/$0.18 · >=9 $0.54/$0.27.
-- Complex / Superflow: by nodes executed — 1-10 $0.30/$0.18 · 11-20 $0.60/$0.36 · 21-30 $0.90/$0.54 · >30 = 21-30 base + $0.02/$0.01 per node beyond 30. Nested superflows are summed.
-- Voice: $0.09 / $0.06 per minute.
-Features like Knowledge Base, tools, memory, guardrails run INSIDE a run and are NOT billed separately — they never change the tier.
+### APC rates, reference profiles, and plans
+- Rate: SaaS (cloud) $20 per 1,000,000 APCs · VPC/On-Prem (vpc) $5 per 1,000,000 APCs. NO complexity-tier rate and NO node/sub-agent band — a run costs whatever tokens it consumes.
+- Reference APCs/run (sanity-check): single agent ~15,000 (typical) / ~50,000 (heavy); multi-agent orchestration ~100,000 (typical) / ~300,000 (heavy).
+- Standard plans (a year's APCs must fit the capacity): VPC — Studio Lite $50K/10B, Studio Scale $125K/25B, Studio Enterprise $250K/50B (default; $500K/100B). SaaS — Standard $100K/5B (default), $200K/10B. Strategic (Fortune-50, usage-heavy) -> Unlimited Credits $500K+, leadership sign-off. The server recommends the fitting plan; you just supply the design.
+Features like Knowledge Base, tools, memory, guardrails run INSIDE a run — not billed separately, but the tokens they add (retrieved docs, tool schemas/results) DO count toward APCs.
 
-### Orchestration selection (the heart — decide per sub-use-case)
-DESIGN ALTITUDE = PRODUCTION-REALISTIC. First envision the COMPLETE solution a competent architect would actually ship (including implied supporting steps: retrieval, validation, confidence/escalation, human-in-the-loop, system-of-record logging, monitoring). THEN tier it. No sandbagging (don't shrink a real workflow to one agent to look cheap) and no padding (every component must earn its place). "Cheapest pattern that does the job" = does the REAL production job.
-Decompose the solution; pick the cheapest pattern that does each job well. Mixtures are normal.
+### Orchestration selection (classify each sub-use-case)
+DESIGN ALTITUDE = PRODUCTION-REALISTIC. First envision the COMPLETE solution a competent architect would actually ship (including implied supporting steps: retrieval, validation, confidence/escalation, human-in-the-loop, system-of-record logging, monitoring). THEN classify each piece. No sandbagging (don't shrink a real workflow to look cheap) and no padding (every component must earn its place). The orchestration shape no longer sets the price — it drives how many model calls and how much context a run needs (i.e. its APCs).
+Decompose the solution; classify each job. Mixtures are normal.
 - SIMPLE/Single Agent: one task one agent can finish (KB/tools/memory/voice/scheduler/webhook don't change this). The common case.
 - COMPLEX/Superflow: a deterministic workflow needing any SPECIAL NODE — human approval, If/Switch/Loop/Filter, HTTP/Code/Parse-Extract, AI Swarm, durable waits, or a fixed multi-step pipeline. (A schedule/cron alone does NOT force a Superflow.)
 - INTERMEDIATE/Manager: several specialist agents coordinated by a manager at runtime; pure reasoning, no special nodes.
-- VOICE: spoken channel (per minute).
+- VOICE: spoken channel (priced as APCs like everything else).
 Name the capability that forces any escalation.
 
 ### Decomposition discipline (avoid the over-split / inconsistency bug)
@@ -481,8 +460,8 @@ Immediately call tools in order: generate_architecture -> calculate_credits -> c
   - Then each workload: name it, its tier, and WHY in everyday words — explain the capability that decided it in plain terms, not jargon. e.g. "Because some replies need a human to approve them before they go out, and the steps must run in a set order, this is a Superflow — a plain single agent can't pause for approval or call your ticketing system." For a Single Agent, say why one agent is enough.
   - 1 short line on what you deliberately kept OUT to avoid over-building (when relevant), in plain terms.
   Keep the SAME overall length as now — tight, a few short paragraphs/bullets. Goal: the user clearly understands the thinking in simple language, not just the result. Avoid heavy jargon; if you must use a term like "If/Else" or "webhook", briefly say what it does.
-- After all tools complete, give a 1-2 sentence cost summary: total annual cost split into Platform vs LLM, and the headline ROI.
-- Always present Platform cost and LLM cost separately. Highlight that pricing is just runs x complexity, with LLM passed through at provider rates.
+- After all tools complete, give a 1-2 sentence cost summary: total annual APCs, the platform cost (APCs × rate) and LLM cost separately, and the headline ROI. If the server flagged a recommended plan or a strategic (Unlimited Credits) case, mention it in one line.
+- Always present Platform cost and LLM cost separately. Highlight that platform pricing is metered in APCs (tokens): total APCs × $20/M (SaaS) or $5/M (VPC), with LLM passed through at provider rates. Do NOT describe pricing as "runs × complexity" — that model is retired.
 - Your chat description MUST match the diagram and the priced workloads exactly (same workloads, names, tiers, count).
 - When you quote the human hourly rate in chat, use the EXACT fully_loaded_rate you passed to calculate_roi (e.g. "$28.60/hr") — do NOT round it to a different integer than the unit-cost math implies.
 - ROI honesty: if the architecture has a human-in-the-loop node, state the auto-resolution rate and that the remaining units still need brief human review — do NOT claim you replace 100% of the manual labor.`;
@@ -547,10 +526,13 @@ function buildCreditArtifact(toolInput: Record<string, unknown>) {
         : "",
     deployment,
     workloads,
+    total_annual_apc: totals.total_annual_apc,
+    apc_rate_per_m: totals.apc_rate_per_m,
     platform_annual_cost: totals.platform_annual_cost,
     llm_annual_cost: totals.llm_annual_cost,
     llm_annual_cost_external: totals.llm_annual_cost_external,
     total_annual_cost: totals.total_annual_cost,
+    recommended_tier: totals.recommended_tier,
     notes: typeof toolInput.notes === "string" ? toolInput.notes : undefined,
   };
 }

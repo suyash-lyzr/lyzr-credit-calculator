@@ -146,13 +146,27 @@ export interface AgentWorkload {
   byo_model?: boolean; // customer brings own model → $0 LLM on the Lyzr bill
 
   // Computed by the engine (filled server-side / on edit):
-  band_label?: string;
-  price_per_run?: number;
-  platform_cost?: number;
+  apc_per_run?: number; // Σ(input+output) tokens across all model calls in one run
+  annual_apc?: number; // apc_per_run × runs_per_period
+  apc_profile_label?: string; // e.g. "single-agent · ~P50"
+  platform_cost?: number; // annual_apc × APC rate
   llm_cost_per_run?: number;
   llm_cost?: number; // on the Lyzr bill (0 when BYO)
   llm_cost_external?: number; // paid to provider (includes BYO)
   total_cost?: number;
+
+  // Legacy (old complexity-tier model; kept so old saved templates still load):
+  band_label?: string;
+  price_per_run?: number;
+}
+
+/** The standard plan a use-case's annual APC usage fits within (or a strategic flag). */
+export interface TierRecommendation {
+  deployment: "cloud" | "vpc";
+  tier: { name: string; price: number; capacityApc: number; note?: string } | null;
+  strategic: boolean;
+  capacity_used_pct: number;
+  annual_apc: number;
 }
 
 export interface CreditCalculation {
@@ -160,10 +174,14 @@ export interface CreditCalculation {
 
   deployment: "cloud" | "vpc";
 
-  // --- NEW workload-based model (engine-computed) ---
+  // --- APC (Agent Processing Credit) model (engine-computed) ---
   workloads?: AgentWorkload[];
-  platform_annual_cost?: number; // Σ workload platform_cost
+  total_annual_apc?: number; // Σ annual APCs across workloads
+  apc_rate_per_m?: number; // $/1M APC for the deployment
+  platform_annual_cost?: number; // total_annual_apc × rate
+  llm_annual_cost?: number; // Σ LLM on the Lyzr bill (excludes BYO)
   llm_annual_cost_external?: number; // Σ LLM paid to providers (includes BYO)
+  recommended_tier?: TierRecommendation; // smallest plan that fits, or strategic
   notes?: string;
 
   // --- Legacy flat-rate fields (optional; kept for old saved templates) ---
@@ -203,7 +221,6 @@ export interface CreditCalculation {
   llm_buffer_pct?: number;
   llm_per_unit_cost?: number;
   llm_breakdown?: LLMModelBreakdown[];
-  llm_annual_cost: number;
   llm_note?: string;
 
   total_annual_cost: number;

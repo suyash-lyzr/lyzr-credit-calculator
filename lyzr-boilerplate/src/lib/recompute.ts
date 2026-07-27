@@ -24,10 +24,13 @@ export function recomputeCredits(
     ...prev,
     deployment,
     workloads: merged,
+    total_annual_apc: totals.total_annual_apc,
+    apc_rate_per_m: totals.apc_rate_per_m,
     platform_annual_cost: totals.platform_annual_cost,
     llm_annual_cost: totals.llm_annual_cost,
     llm_annual_cost_external: totals.llm_annual_cost_external,
     total_annual_cost: totals.total_annual_cost,
+    recommended_tier: totals.recommended_tier,
   };
 }
 

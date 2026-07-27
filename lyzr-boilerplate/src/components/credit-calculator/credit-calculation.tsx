@@ -146,16 +146,9 @@ function WorkloadCard({
   const [open, setOpen] = React.useState(true);
   const calls = w.llm_calls ?? [];
   const hasCalls = calls.length > 0;
-  const hasPaths = Array.isArray(w.execution_paths) && w.execution_paths.length >= 2;
 
-  // Switching tier seeds a sensible default for the new tier's band driver.
-  const changeTier = (complexity: Complexity) => {
-    const patch: Partial<AgentWorkload> = { complexity };
-    if (complexity === "intermediate" && !w.sub_agents_executed) patch.sub_agents_executed = 2;
-    if (complexity === "complex" && !w.nodes_executed) patch.nodes_executed = 5;
-    if (complexity === "voice" && !w.voice_minutes_per_run) patch.voice_minutes_per_run = 1;
-    onUpdate?.(patch);
-  };
+  // Complexity is now just the orchestration classification; it no longer sets a rate.
+  const changeTier = (complexity: Complexity) => onUpdate?.({ complexity });
 
   return (
     <div className="rounded-lg border bg-input-bg/40 overflow-hidden">
@@ -166,8 +159,11 @@ function WorkloadCard({
             <span className="font-semibold text-sm">{w.name}</span>
             <TierBadge complexity={w.complexity} />
           </div>
-          {w.band_label && (
-            <p className="text-[11px] text-muted-foreground mt-0.5">{w.band_label}</p>
+          {(w.apc_profile_label || typeof w.apc_per_run === "number") && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {typeof w.apc_per_run === "number" ? `${formatNumber(w.apc_per_run)} APCs/run` : ""}
+              {w.apc_profile_label ? ` · ${w.apc_profile_label}` : ""}
+            </p>
           )}
           {w.reasoning && (
             <p className="text-[11px] text-foreground/60 italic mt-0.5">{w.reasoning}</p>
@@ -203,40 +199,10 @@ function WorkloadCard({
               value={w.runs_per_period ?? 0}
               onCommit={(n) => onUpdate?.({ runs_per_period: n })}
             />
-
-            {w.complexity === "intermediate" && (
-              <NumField
-                label="Sub-agents / run"
-                value={w.sub_agents_executed ?? 1}
-                min={1}
-                onCommit={(n) => onUpdate?.({ sub_agents_executed: n })}
-              />
-            )}
-            {w.complexity === "complex" &&
-              (hasPaths ? (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] text-muted-foreground">Nodes / run</span>
-                  <span className="rounded border bg-muted px-2 py-1 text-xs text-muted-foreground">
-                    blended paths
-                  </span>
-                </div>
-              ) : (
-                <NumField
-                  label="Nodes / run"
-                  value={w.nodes_executed ?? 1}
-                  min={1}
-                  onCommit={(n) => onUpdate?.({ nodes_executed: n })}
-                />
-              ))}
-            {w.complexity === "voice" && (
-              <NumField
-                label="Minutes / run"
-                value={w.voice_minutes_per_run ?? 0}
-                step={0.5}
-                onCommit={(n) => onUpdate?.({ voice_minutes_per_run: n })}
-              />
-            )}
           </div>
+          <p className="text-[10px] text-muted-foreground">
+            APCs/run come from the model calls below (Σ input+output tokens). Edit a call&apos;s tokens to change platform cost.
+          </p>
           <label className="flex items-center gap-2 text-[11px] text-foreground/70">
             <input
               type="checkbox"
@@ -256,8 +222,8 @@ function WorkloadCard({
           <div className="font-mono font-medium">{formatNumber(w.runs_per_period)}</div>
         </div>
         <div className="bg-background px-2 py-1.5">
-          <div className="text-[10px] text-muted-foreground">Price/run</div>
-          <div className="font-mono font-medium">{formatMicroCurrency(w.price_per_run ?? 0)}</div>
+          <div className="text-[10px] text-muted-foreground">APCs/run</div>
+          <div className="font-mono font-medium">{formatNumber(w.apc_per_run ?? 0)}</div>
         </div>
         <div className="bg-background px-2 py-1.5">
           <div className="text-[10px] text-muted-foreground">Platform</div>
@@ -373,8 +339,8 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
       <div className="space-y-4">
         <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 px-3 py-2">
           <p className="text-xs text-amber-800 dark:text-amber-200">
-            <span className="font-semibold">Legacy estimate:</span> saved under the old flat-rate
-            pricing model. Re-run the calculation to see the new complexity-tier breakdown.
+            <span className="font-semibold">Legacy estimate:</span> saved under an older pricing
+            model. Re-run the calculation to see the new APC (token-based) breakdown.
           </p>
         </div>
         <div className="rounded-lg border-2 border-primary bg-primary/10 px-4 py-3">
@@ -414,14 +380,20 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
   const llmPassThrough = Math.max(0, llmExternal - llmOnLyzrBill);
   const lyzrInvoice = platformTotal + llmOnLyzrBill; // what Lyzr bills
   const allInTotal = platformTotal + llmExternal; // platform + all LLM the customer pays
+  const totalApc = data.total_annual_apc ?? workloads.reduce((s, w) => s + (w.annual_apc ?? 0), 0);
+  const apcRatePerM = data.apc_rate_per_m ?? (isCloud ? 20 : 5);
+  const rec = data.recommended_tier; // recommended plan (or strategic flag)
+  const fmtApc = (n: number) =>
+    n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : formatNumber(Math.round(n));
 
   return (
     <div className="space-y-5">
       {/* Intro + edit toggle */}
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-foreground/80">
-          <span className="font-semibold">Pricing is just runs × complexity.</span> LLM cost passes
-          through at provider rates &mdash; no markup.
+          <span className="font-semibold">Platform cost is metered in APCs (tokens)</span> — total
+          APCs × {isCloud ? "$20" : "$5"}/M ({isCloud ? "SaaS" : "VPC"}). LLM cost passes through at
+          provider rates &mdash; no markup.
         </p>
         {canEdit && (
           <button
@@ -524,7 +496,9 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
               Lyzr Platform
             </p>
             <p className="text-2xl font-bold text-primary mt-0.5">{formatCurrency(platformTotal)}</p>
-            <p className="text-[11px] text-foreground/60 mt-1">Runs × complexity, all workloads</p>
+            <p className="text-[11px] text-foreground/60 mt-1">
+              {fmtApc(totalApc)} APCs/yr × ${apcRatePerM}/M
+            </p>
           </div>
           <div className="rounded-lg border border-border bg-muted/30 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
@@ -551,6 +525,36 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
               : ""}
           </p>
         </div>
+
+        {/* Recommended plan (or strategic flag) */}
+        {rec && rec.strategic && (
+          <div className="rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800">Strategic account — route to leadership</p>
+            <p className="mt-1 text-xs text-amber-800/80">
+              Estimated usage ({fmtApc(totalApc)} APCs/yr) exceeds the largest standard{" "}
+              {isCloud ? "SaaS" : "VPC"} plan. This looks like an Unlimited Credits deal ($500K+),
+              which needs leadership sign-off — not a self-serve plan.
+            </p>
+          </div>
+        )}
+        {rec && !rec.strategic && rec.tier && (
+          <div className="rounded-lg border border-primary/25 bg-primary/[0.04] px-4 py-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">
+                Fits the {rec.tier.name} plan
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  ({isCloud ? "SaaS" : "VPC"})
+                </span>
+              </p>
+              <p className="text-sm font-bold text-primary">{formatCurrency(rec.tier.price)}/yr</p>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Uses ~{rec.capacity_used_pct < 0.1 ? "<0.1" : rec.capacity_used_pct}% of the plan&apos;s{" "}
+              {fmtApc(rec.tier.capacityApc)}-APC capacity ({fmtApc(totalApc)} APCs/yr).{" "}
+              Plans are bought at the account level — this use case fits comfortably inside one.
+            </p>
+          </div>
+        )}
       </section>
 
       {data.notes && (

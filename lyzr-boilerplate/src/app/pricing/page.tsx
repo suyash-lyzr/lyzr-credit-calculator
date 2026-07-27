@@ -14,45 +14,36 @@ import {
   IconChartBar,
   IconUser,
   IconUsersGroup,
-  IconMicrophone,
   IconChevronDown,
 } from "@tabler/icons-react";
 import {
-  SIMPLE_RATE,
-  MANAGER_BANDS,
-  SUPERFLOW_BANDS,
-  SUPERFLOW_BASE_OVER_30,
-  SUPERFLOW_PER_NODE_OVER_30,
-  VOICE_RATE_PER_MIN,
+  APC_RATE_PER_M,
+  VPC_TIERS,
+  SAAS_TIERS,
+  STRATEGIC_MIN_PRICE,
+  APC_PROFILES,
   MODEL_RATES,
   type ModelRate,
+  type PlanTier,
 } from "@/lib/pricing";
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-const money = (n: number) => `$${n.toFixed(2)}`;
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+const fmtCap = (n: number) => (n >= 1e9 ? `${n / 1e9}B` : `${(n / 1e6).toFixed(0)}M`);
 
 const SECTIONS = [
   { id: "overview", label: "Overview", icon: IconCoins },
-  { id: "runs", label: "Agent Runs", icon: IconRefresh },
-  { id: "complexity", label: "Complexity Tiers", icon: IconStack2 },
-  { id: "rates", label: "Rate Card · SaaS & VPC", icon: IconReceipt2 },
+  { id: "apc", label: "What is an APC?", icon: IconStack2 },
+  { id: "rates", label: "Deployment Rates", icon: IconReceipt2 },
+  { id: "plans", label: "Standard Plans", icon: IconReceipt2 },
+  { id: "profiles", label: "APCs per Run", icon: IconRefresh },
   { id: "orchestration", label: "Choosing Orchestration", icon: IconSitemap },
   { id: "models", label: "Model Selection & LLM Rates", icon: IconCpu },
   { id: "calculation", label: "How the Total Is Calculated", icon: IconCalculator },
   { id: "roi", label: "ROI Analysis", icon: IconChartBar },
 ];
-
-function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "saas" | "vpc" }) {
-  const cls =
-    tone === "saas"
-      ? "bg-primary/10 text-primary"
-      : tone === "vpc"
-        ? "bg-primary text-primary-foreground"
-        : "bg-muted text-muted-foreground";
-  return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{children}</span>;
-}
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`rounded-xl border bg-card p-5 ${className}`}>{children}</div>;
@@ -68,8 +59,7 @@ function RatesDisclosure({ provider, models }: { provider: string; models: { nam
         aria-expanded={open}
       >
         <span className="text-sm font-semibold">
-          {provider}{" "}
-          <span className="font-normal text-muted-foreground">· {models.length} models</span>
+          {provider} <span className="font-normal text-muted-foreground">· {models.length} models</span>
         </span>
         <IconChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -98,6 +88,33 @@ function H({ id, eyebrow, title, sub }: { id: string; eyebrow: string; title: st
       <h2 className="mt-1 text-2xl font-bold tracking-tight">{title}</h2>
       {sub && <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">{sub}</p>}
     </div>
+  );
+}
+
+function PlanTable({ deployment, tiers }: { deployment: string; tiers: PlanTier[] }) {
+  return (
+    <Card className="overflow-x-auto p-0">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-muted/50 text-left">
+            <th className="px-4 py-2.5 font-semibold">{deployment} plan</th>
+            <th className="px-4 py-2.5 font-semibold text-right">Annual price</th>
+            <th className="px-4 py-2.5 font-semibold text-right">APC capacity</th>
+            <th className="px-4 py-2.5 font-semibold">Notes</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {tiers.map((t) => (
+            <tr key={t.name}>
+              <td className="px-4 py-2.5 font-medium">{t.name}</td>
+              <td className="px-4 py-2.5 text-right font-mono">{usd(t.price)}</td>
+              <td className="px-4 py-2.5 text-right font-mono">{fmtCap(t.capacityApc)}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{t.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
 
@@ -131,7 +148,7 @@ export default function PricingExplainerPage() {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // Group LLM models by provider for the rate table.
+  // Group LLM models by provider for the rate tables.
   const byProvider = React.useMemo(() => {
     const map: Record<string, { name: string; r: ModelRate }[]> = {};
     Object.entries(MODEL_RATES).forEach(([name, r]) => {
@@ -140,25 +157,24 @@ export default function PricingExplainerPage() {
     Object.values(map).forEach((list) => list.sort((a, b) => a.r.input - b.r.input));
     const order = ["OpenAI", "Anthropic", "Google", "Amazon Bedrock", "Groq", "Perplexity", "xAI"];
     return Object.entries(map).sort(
-      (a, b) => (order.indexOf(a[0]) + 99) % 100 - ((order.indexOf(b[0]) + 99) % 100)
+      (a, b) => ((order.indexOf(a[0]) + 99) % 100) - ((order.indexOf(b[0]) + 99) % 100)
     );
   }, []);
+
+  const saasRate = APC_RATE_PER_M.cloud;
+  const vpcRate = APC_RATE_PER_M.vpc;
 
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       {/* Top bar */}
       <header className="flex items-center justify-between border-b px-6 py-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/credit-calculator"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <IconArrowLeft className="h-4 w-4" /> Back to Calculator
-          </Link>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-serif text-lg font-bold tracking-tight">How Lyzr Pricing Works</span>
-        </div>
+        <Link
+          href="/credit-calculator"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <IconArrowLeft className="h-4 w-4" /> Back to Calculator
+        </Link>
+        <span className="font-serif text-lg font-bold tracking-tight">How Lyzr Pricing Works</span>
         <div className="w-[140px]" />
       </header>
 
@@ -206,7 +222,7 @@ export default function PricingExplainerPage() {
                 id="overview"
                 eyebrow="The model in one line"
                 title="Total Cost = Lyzr Platform + LLM"
-                sub="Two numbers, computed independently. The platform fee is what Lyzr bills; the LLM fee is the model provider's public rate passed straight through — with no markup."
+                sub="Two numbers, computed independently. The platform fee is metered in APCs (tokens) and is what Lyzr bills; the LLM fee is the model provider's public rate passed straight through — with no markup."
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Card>
@@ -215,11 +231,12 @@ export default function PricingExplainerPage() {
                     <h3 className="font-semibold">Lyzr Platform Cost</h3>
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Depends on exactly two things: the number of <strong className="text-foreground">agent runs</strong>{" "}
-                    and the <strong className="text-foreground">complexity</strong> of the agent doing the work.
+                    Metered in <strong className="text-foreground">APCs</strong> (Agent Processing
+                    Credits). 1 APC = 1 token. Cost = total tokens your agents process × a flat
+                    per-token rate that depends only on <strong className="text-foreground">deployment</strong>.
                   </p>
                   <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs">
-                    Σ (price-per-run × runs)
+                    total APCs × rate ( ${vpcRate}/M VPC · ${saasRate}/M SaaS )
                   </div>
                 </Card>
                 <Card>
@@ -229,7 +246,8 @@ export default function PricingExplainerPage() {
                   </div>
                   <p className="mt-2 text-sm text-muted-foreground">
                     The model-provider cost at the public rate, <strong className="text-foreground">no markup</strong>.
-                    It is <strong className="text-foreground">$0 on the Lyzr bill</strong> if you bring your own model.
+                    It is <strong className="text-foreground">$0 on the Lyzr bill</strong> if you bring your own model
+                    (the platform APC cost still applies).
                   </p>
                   <div className="mt-3 rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs">
                     Σ (tokens × provider rate)
@@ -237,169 +255,154 @@ export default function PricingExplainerPage() {
                 </Card>
               </div>
               <p className="mt-4 text-sm text-muted-foreground">
-                Features like Knowledge Base, tools, memory, data query and guardrails run{" "}
-                <em>inside</em> a run — they are never billed separately and never change the tier.
+                Features like Knowledge Base, tools, memory and guardrails run <em>inside</em> a run —
+                they are never billed separately, but the tokens they add (retrieved docs, tool
+                schemas and results) do count toward APCs.
               </p>
             </section>
 
-            {/* RUNS */}
+            {/* WHAT IS AN APC */}
             <section>
               <H
-                id="runs"
-                eyebrow="The first pricing axis"
-                title="What counts as an agent run"
-                sub="A run = one execution request — one invocation/trigger of a workload — no matter how much happens inside it. You're billed for the unit of work delivered, not the machinery used."
+                id="apc"
+                eyebrow="The unit"
+                title="What is an APC?"
+                sub="An Agent Processing Credit is the basic unit of work an AI model reads and writes. 1 APC = 1 token — a chunk of text (~4 characters, or ~¾ of a word)."
               />
-              <Card className="overflow-hidden p-0">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 text-left">
-                      <th className="px-4 py-2.5 font-semibold">Situation</th>
-                      <th className="px-4 py-2.5 font-semibold w-32">Runs</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {[
-                      ["A single agent answers once", "1 run"],
-                      ["One user chat message", "1 run (10-msg chat = 10 runs)"],
-                      ["A manager that calls 5 sub-agents for one request", "1 run"],
-                      ["A Superflow with 12 nodes executed once", "1 run"],
-                      ["A scheduled flow firing daily for 30 days", "30 runs"],
-                      ["A Superflow that pauses days for approval, then resumes", "1 run"],
-                    ].map(([a, b]) => (
-                      <tr key={a}>
-                        <td className="px-4 py-2.5">{a}</td>
-                        <td className="px-4 py-2.5 font-medium">{b}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <Card className="bg-primary/[0.04] border-primary/20">
+                <p className="text-sm">
+                  <strong>APC = input tokens + output tokens</strong> — everything a model call
+                  consumes, on both sides.
+                </p>
               </Card>
-            </section>
-
-            {/* COMPLEXITY */}
-            <section>
-              <H
-                id="complexity"
-                eyebrow="The second pricing axis"
-                title="Complexity — four tiers"
-                sub="Complexity sets the price of each run, mapped to how the work is built. Manager and Superflow are further banded by how much actually executes at runtime."
-              />
-              <div className="space-y-3">
+              <p className="mt-4 mb-2 text-sm font-semibold">What counts toward APC usage</p>
+              <div className="grid gap-2 sm:grid-cols-2">
                 {[
-                  {
-                    icon: IconUser,
-                    name: "Simple — Single Agent",
-                    desc: "One agent handles one task end-to-end (with KB, tools, memory, voice or a schedule — none of which change the tier).",
-                    measure: "Flat per run",
-                  },
-                  {
-                    icon: IconUsersGroup,
-                    name: "Intermediate — Manager",
-                    desc: "A manager coordinates several specialist sub-agents and synthesizes their answers. Pure reasoning, no special workflow nodes.",
-                    measure: "Banded by sub-agents executed",
-                  },
-                  {
-                    icon: IconSitemap,
-                    name: "Complex — Superflow",
-                    desc: "A defined multi-step workflow with special nodes (approvals, branching/loops, integrations). The superset — it can contain agents and a manager.",
-                    measure: "Banded by nodes executed",
-                  },
-                  {
-                    icon: IconMicrophone,
-                    name: "Voice",
-                    desc: "A spoken (inbound/outbound) interaction. Enabled on the agent that handles the call.",
-                    measure: "Per minute",
-                  },
-                ].map((t) => {
-                  const Icon = t.icon;
-                  return (
-                    <Card key={t.name} className="flex items-start gap-3">
-                      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold">{t.name}</h3>
-                          <Pill>{t.measure}</Pill>
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{t.desc}</p>
-                      </div>
-                    </Card>
-                  );
-                })}
+                  ["Input APCs", "System prompt, user message, conversation history, tool definitions, retrieved documents, files, records."],
+                  ["Output APCs", "The visible response generated by the model."],
+                  ["Reasoning APCs", "Hidden model computation used by reasoning-capable models, when billed by the provider."],
+                  ["Tool / Context APCs", "Tool schemas, tool call results, file reads, search results, agent-to-agent handoffs."],
+                ].map(([t, d]) => (
+                  <div key={t} className="rounded-lg border bg-card px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{d}</p>
+                  </div>
+                ))}
               </div>
+              <p className="mt-4 text-sm text-muted-foreground">
+                <strong className="text-foreground">Why price on APCs?</strong> It keeps Lyzr in the
+                same mental model the whole market uses (per-million-token rates) — no abstract
+                &quot;credits&quot; or seat math — every run exposes its full token usage so you can
+                audit every APC, and the <em>platform</em> rate per APC never changes even if model
+                prices move.
+              </p>
             </section>
 
-            {/* RATES */}
+            {/* DEPLOYMENT RATES */}
             <section>
               <H
                 id="rates"
-                eyebrow="Default rate card"
-                title="Platform rates — SaaS vs VPC / On-Prem"
-                sub="Two deployments. SaaS is fully Lyzr-managed. Customer VPC and On-Prem run in your environment and share the same (lower) rate card."
+                eyebrow="The rate card"
+                title="Deployment Rates"
+                sub="The APC unit is the same everywhere — only the rate changes by deployment type."
               />
-              <div className="mb-3 flex gap-2">
-                <Pill tone="saas">SaaS = Lyzr-managed</Pill>
-                <Pill tone="vpc">VPC / On-Prem = your environment</Pill>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Card>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    VPC / Private Deployment
+                  </p>
+                  <p className="mt-1 text-3xl font-bold text-primary">${vpcRate} <span className="text-base font-medium text-muted-foreground">/ 1M APCs</span></p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Runs inside your cloud, on your infrastructure. Lower per-token rate.
+                  </p>
+                </Card>
+                <Card>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    SaaS (Lyzr-hosted)
+                  </p>
+                  <p className="mt-1 text-3xl font-bold text-primary">${saasRate} <span className="text-base font-medium text-muted-foreground">/ 1M APCs</span></p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Fully managed, zero-infrastructure. Higher per-token rate.
+                  </p>
+                </Card>
               </div>
+              <p className="mt-3 text-xs text-muted-foreground italic">
+                SaaS and VPC are priced on completely different unit economics — the same token
+                volume costs very differently by deployment. Never quote a SaaS number against a VPC
+                estimate or vice-versa.
+              </p>
+            </section>
+
+            {/* STANDARD PLANS */}
+            <section>
+              <H
+                id="plans"
+                eyebrow="Capacity plans"
+                title="Standard Plans"
+                sub="Each plan is an annual price that buys an annual APC (token) capacity. A single use case usually fits comfortably inside a plan — plans are bought at the account level for all of a customer's agents."
+              />
+              <p className="mb-2 text-sm font-semibold">VPC (private deployment)</p>
+              <PlanTable deployment="VPC" tiers={VPC_TIERS} />
+              <p className="mt-2 text-xs text-muted-foreground">
+                Studio Enterprise is the default to lead with; Lite and Scale are smaller /
+                specific-case entry points, not the opening offer.
+              </p>
+              <p className="mt-5 mb-2 text-sm font-semibold">SaaS (Lyzr-hosted)</p>
+              <PlanTable deployment="SaaS" tiers={SAAS_TIERS} />
+              <div className="mt-5 rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">
+                  Strategic → Unlimited Credits ({usd(STRATEGIC_MIN_PRICE)}+)
+                </p>
+                <p className="mt-1 text-xs text-amber-800/80">
+                  Fortune-50-scale, usage-heavy accounts aren&apos;t metered against a plan — usage
+                  runs freely and the relationship is priced as a strategic partnership. This route
+                  needs leadership sign-off and is not a self-serve estimate.
+                </p>
+              </div>
+            </section>
+
+            {/* APCs PER RUN */}
+            <section>
+              <H
+                id="profiles"
+                eyebrow="Sizing a run"
+                title="APCs per Run"
+                sub="A run's APCs = the sum of input + output tokens across every model call it makes. These reference profiles let you sanity-check an estimate; the calculator computes the exact figure from each node's token usage."
+              />
               <Card className="overflow-x-auto p-0">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/50 text-left">
-                      <th className="px-4 py-2.5 font-semibold">Tier</th>
-                      <th className="px-4 py-2.5 font-semibold">Runtime measure</th>
-                      <th className="px-4 py-2.5 font-semibold text-right">SaaS</th>
-                      <th className="px-4 py-2.5 font-semibold text-right">VPC / On-Prem</th>
+                      <th className="px-4 py-2.5 font-semibold">Run type</th>
+                      <th className="px-4 py-2.5 font-semibold text-right">Typical (P50)</th>
+                      <th className="px-4 py-2.5 font-semibold text-right">Heavy (P95)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     <tr>
-                      <td className="px-4 py-2.5 font-medium">Simple · Single Agent</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">flat / run</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{money(SIMPLE_RATE.cloud)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{money(SIMPLE_RATE.vpc)}</td>
-                    </tr>
-                    {MANAGER_BANDS.map((b, i) => (
-                      <tr key={b.label}>
-                        <td className="px-4 py-2.5 font-medium">{i === 0 ? "Intermediate · Manager" : ""}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground">{b.label}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{money(b.cloud)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{money(b.vpc)}</td>
-                      </tr>
-                    ))}
-                    {SUPERFLOW_BANDS.map((b, i) => (
-                      <tr key={b.label}>
-                        <td className="px-4 py-2.5 font-medium">{i === 0 ? "Complex · Superflow" : ""}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground">{b.label}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{money(b.cloud)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{money(b.vpc)}</td>
-                      </tr>
-                    ))}
-                    <tr>
-                      <td className="px-4 py-2.5 font-medium"></td>
-                      <td className="px-4 py-2.5 text-muted-foreground">&gt; 30 nodes</td>
-                      <td className="px-4 py-2.5 text-right font-mono">
-                        {money(SUPERFLOW_BASE_OVER_30.cloud)} + {money(SUPERFLOW_PER_NODE_OVER_30.cloud)}/extra
+                      <td className="px-4 py-2.5">
+                        <span className="font-medium">Single agent</span>
+                        <span className="block text-xs text-muted-foreground">prompt + history + tool calls + response</span>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono">
-                        {money(SUPERFLOW_BASE_OVER_30.vpc)} + {money(SUPERFLOW_PER_NODE_OVER_30.vpc)}/extra
-                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono">{APC_PROFILES.single.p50.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{APC_PROFILES.single.p95.toLocaleString()}</td>
                     </tr>
                     <tr>
-                      <td className="px-4 py-2.5 font-medium">Voice</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">per minute</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{money(VOICE_RATE_PER_MIN.cloud)}/min</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{money(VOICE_RATE_PER_MIN.vpc)}/min</td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-medium">Multi-agent orchestration</span>
+                        <span className="block text-xs text-muted-foreground">manager + workers, or a multi-node Superflow</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono">{APC_PROFILES.multi.p50.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{APC_PROFILES.multi.p95.toLocaleString()}</td>
                     </tr>
                   </tbody>
                 </table>
               </Card>
-              <p className="mt-3 text-xs text-muted-foreground">
-                <strong>&gt;30 nodes</strong> = the 21–30 base price plus a per-node increment beyond 30 (e.g. 50 nodes
-                on-prem = {money(SUPERFLOW_BASE_OVER_30.vpc)} + 20 × {money(SUPERFLOW_PER_NODE_OVER_30.vpc)} = $0.74).
-                Nested Superflows are each priced on their own node count and summed. A Manager running <em>inside</em> a
-                Superflow counts purely as nodes — no separate manager charge.
+              <p className="mt-3 text-sm text-muted-foreground">
+                There is <strong className="text-foreground">no complexity-tier rate and no
+                node/sub-agent band</strong> — a run costs whatever tokens it actually consumes.
+                Complexity still matters because a more complex agent makes more calls and carries
+                more context, which means more APCs.
               </p>
             </section>
 
@@ -407,27 +410,10 @@ export default function PricingExplainerPage() {
             <section>
               <H
                 id="orchestration"
-                eyebrow="The heart of the estimate"
+                eyebrow="Designing the solution"
                 title="How we choose the orchestration"
-                sub="The pattern we choose sets the price — so we design the solution you'd actually build, then pick the simplest one that does the job well. Most real apps are a mix of patterns."
+                sub="The pattern doesn't set the price anymore — but it decides how many model calls and how much context a run needs (its APCs). We design the real production solution, then classify each part."
               />
-              <Card className="bg-muted/30">
-                <h4 className="text-sm font-semibold">How we approach it</h4>
-                <p className="mt-1.5 text-sm text-muted-foreground">
-                  We design the complete solution you&apos;d actually run in production — not a stripped-down version, and
-                  not an over-engineered one. That means including the supporting steps a real build needs (pulling in
-                  knowledge, checking quality, sending tricky cases to a human, and writing results back to your
-                  systems), then choosing the simplest, lowest-cost pattern that does that job well.
-                </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  So the estimate is fair, we don&apos;t leave out real steps just to make it look cheaper, and we
-                  don&apos;t add agents or steps that aren&apos;t actually needed.
-                </p>
-              </Card>
-
-              <p className="mt-6 mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                The three patterns
-              </p>
               <div className="space-y-3">
                 {/* SINGLE AGENT */}
                 <div className="flex gap-3.5 rounded-xl border border-primary/15 bg-primary/[0.03] p-4">
@@ -442,19 +428,13 @@ export default function PricingExplainerPage() {
                       </span>
                     </div>
                     <p className="mt-1.5 text-sm text-muted-foreground">
-                      Use a <strong className="text-foreground">single agent</strong> when the whole job is{" "}
-                      <strong className="text-foreground">one specific task</strong> that one agent can finish on its
-                      own — answer a question, summarize a document, classify a ticket, or hold a conversation. It can
-                      still use a knowledge base, tools, and memory and stay a single agent. This is the most common
-                      case.
-                    </p>
-                    <p className="mt-2.5 rounded-lg bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground/70">Example</span> · an FAQ assistant that answers
-                      customer questions from your help center.
+                      Use a single agent when the whole job is one specific task one agent can finish
+                      on its own — answer a question, summarize a document, classify a ticket, hold a
+                      conversation. It can still use a knowledge base, tools and memory. The most
+                      common case, and the fewest APCs per run.
                     </p>
                   </div>
                 </div>
-
                 {/* MANAGER */}
                 <div className="flex gap-3.5 rounded-xl border border-primary/25 bg-primary/[0.055] p-4">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -468,19 +448,13 @@ export default function PricingExplainerPage() {
                       </span>
                     </div>
                     <p className="mt-1.5 text-sm text-muted-foreground">
-                      Use a <strong className="text-foreground">manager</strong> when one job needs{" "}
-                      <strong className="text-foreground">several specialist agents working together</strong>, and a
-                      manager decides which specialists to call and combines their answers. It&apos;s all reasoning —
-                      there&apos;s no fixed step-by-step workflow, no approvals, and no external system calls.
-                    </p>
-                    <p className="mt-2.5 rounded-lg bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground/70">Example</span> · a research assistant where one
-                      specialist searches the web, another reads filings, and another scans news — then the manager
-                      writes a single brief.
+                      Use a manager when one job needs several specialist agents working together and
+                      a manager decides which to call and combines their answers. Pure reasoning — no
+                      fixed workflow, no approvals, no external system calls. More calls per run → more
+                      APCs.
                     </p>
                   </div>
                 </div>
-
                 {/* SUPERFLOW */}
                 <div className="flex gap-3.5 rounded-xl border border-primary/40 bg-primary/[0.08] p-4">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary">
@@ -494,124 +468,51 @@ export default function PricingExplainerPage() {
                       </span>
                     </div>
                     <p className="mt-1.5 text-sm text-muted-foreground">
-                      Use a Superflow when the work is a{" "}
-                      <strong className="text-foreground">defined, repeatable workflow</strong> — the same steps run in
-                      the same order every time — <strong className="text-foreground">and</strong> it needs one of these
-                      special capabilities a single agent or manager can&apos;t provide:
+                      Use a Superflow when the work is a defined, repeatable workflow that needs a
+                      special capability a single agent or manager can&apos;t provide — human approval,
+                      deterministic branching/loops, non-LLM / integration steps (HTTP, Code,
+                      Parse/Extract), AI Swarm, durable long-running execution, or a fixed multi-step
+                      pipeline. Only the LLM/agent nodes consume APCs; steps like If, HTTP and Code
+                      don&apos;t.
                     </p>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {[
-                        ["Human-in-the-loop approval", "Pause for a person to approve/reject (Wait for Approval)"],
-                        ["Deterministic control flow", "If/Else, Switch, Loop, Filter, Merge"],
-                        ["Non-LLM / integration steps", "HTTP, Code, Parse/Extract, Crypto, Set"],
-                        ["AI Swarm", "Split into parallel sub-tasks as a workflow step"],
-                        ["Durable, long-running execution", "Waits of days/weeks, retries, exactly-once"],
-                        ["A fixed multi-step pipeline", "Agents/steps chained in a defined order"],
-                      ].map(([t, d]) => (
-                        <div key={t} className="rounded-lg border bg-card px-3 py-2.5">
-                          <p className="text-sm font-medium">{t}</p>
-                          <p className="text-xs text-muted-foreground">{d}</p>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </div>
               </div>
-              <h4 className="mt-6 mb-2 text-sm font-semibold">The decision in 4 steps (for each part of the app)</h4>
-              <ol className="space-y-2 text-sm">
-                {[
-                  ["Is it one task a single agent can finish on its own?", "→ Single Agent (the common case)"],
-                  ["Is it a fixed, repeatable workflow that needs a special step (approval, branching/looping, an external system call, or a set sequence)?", "→ Superflow"],
-                  ["Does it need several specialist agents coordinated by a manager (pure reasoning)?", "→ Manager"],
-                  ["Is the channel spoken?", "→ enable Voice (per minute)"],
-                ].map(([q, a], i) => (
-                  <li key={q} className="flex gap-3 rounded-lg border bg-card px-3 py-2.5">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                      {i + 1}
-                    </span>
-                    <span>
-                      <span className="font-medium">{q}</span>{" "}
-                      <span className="text-muted-foreground">{a}</span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-2 text-sm text-muted-foreground">
-                A real app is usually a <strong className="text-foreground">mixture</strong> — decompose it, classify
-                each piece, and price each separately.
-              </p>
-
-              <h4 className="mt-6 mb-2 text-sm font-semibold">Examples</h4>
-              <Card className="overflow-x-auto p-0">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 text-left">
-                      <th className="px-4 py-2.5 font-semibold">Use case</th>
-                      <th className="px-4 py-2.5 font-semibold">Pattern(s)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {[
-                      ["FAQ chatbot over a knowledge base", "Single Agent (KB is just a feature)"],
-                      ["Daily KPI summary emailed at 9am", "Single Agent (scheduled — not a Superflow)"],
-                      ["Company research brief (web + filings + news)", "Manager (dispatches specialists, synthesizes)"],
-                      ["Invoice: parse → check → approve → post to ERP", "Superflow (approval + integration + pipeline)"],
-                      ["Recruiting suite", "Single (candidate Q&A) + Superflow (screening w/ approval) + Manager (fit)"],
-                    ].map(([u, p]) => (
-                      <tr key={u}>
-                        <td className="px-4 py-2.5">{u}</td>
-                        <td className="px-4 py-2.5 text-muted-foreground">{p}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Card>
             </section>
 
             {/* MODELS */}
             <section>
               <H
                 id="models"
-                eyebrow="LLM cost"
-                title="How we choose the model"
-                sub="For each agent/node we pick the cheapest model that clears its quality bar, and mix models across a design. LLM cost is pass-through at the provider's public rate — no markup."
+                eyebrow="Matching model to task"
+                title="Model Selection & LLM Rates"
+                sub="We pick the cheapest model that clears each node's quality bar and mix models across a workflow. LLM cost passes through at these public per-million-token rates — no markup."
               />
-              <div className="space-y-2">
+              <div className="mb-4 grid gap-2 sm:grid-cols-2">
                 {[
-                  ["Trivial / high-volume", "Routing, classification, tagging, simple extraction", "gpt-5-nano · gpt-5.4-nano · claude-haiku-4-5 · nova-micro"],
-                  ["General-purpose", "Standard chat, Q&A, RAG, summaries, everyday drafting", "a GPT model — gpt-5.4-mini / gpt-5.4 / gpt-5.5"],
-                  ["Complex / high-quality", "Nuanced drafting, careful extraction, risk analysis, coding", "claude-sonnet-4-6"],
-                  ["Complex reasoning", "Hard multi-step planning, deep legal/financial reasoning", "claude-opus-4-8 (sparingly)"],
-                  ["Research / web", "Live search, news, latest info (built-in web access)", "Perplexity sonar / sonar-pro"],
-                  ["Long-context", "Very large documents", "gemini-2.5-pro / gemini-3.1-pro"],
-                ].map(([tier, when, model]) => (
-                  <div key={tier} className="rounded-lg border bg-card px-4 py-3">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold">{tier}</p>
-                      <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{model}</code>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{when}</p>
+                  ["Trivial / high-volume", "Routing, classification, tagging, simple extraction → cheapest tier (gpt-5.4-nano, gemini-2.5-flash-lite, claude-haiku-4.5)."],
+                  ["General-purpose", "Chat, Q&A, RAG answers, summaries, everyday drafting → a GPT model (gpt-5.4-mini by default)."],
+                  ["Complex / high-quality", "Nuanced drafting, careful multi-field extraction, risk analysis, coding → Claude Sonnet 4.6."],
+                  ["Complex reasoning", "Hard multi-step planning, deep legal/financial reasoning → Claude Opus 4.8 (sparingly)."],
+                  ["Research / web search", "Live web lookups → Perplexity Sonar / Sonar Pro (a plain chat model can't search the web)."],
+                  ["Long context", "Very large documents → gemini-2.5-pro / gemini-3.1-pro."],
+                ].map(([t, d]) => (
+                  <div key={t} className="rounded-lg border bg-card px-4 py-3">
+                    <p className="text-sm font-medium">{t}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{d}</p>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">
-                Rule of thumb: don&apos;t put Opus on a node a cheap model handles, and don&apos;t put a cheap model on a
-                node that genuinely needs reasoning. <strong className="text-foreground">Bring your own model</strong>{" "}
-                and the LLM line is $0 on the Lyzr bill (you pay the provider directly).
-              </p>
-
-              <h4 className="mt-6 mb-2 text-sm font-semibold">
-                Default model rates <span className="font-normal text-muted-foreground">($ per 1M tokens · input / output)</span>
-              </h4>
-              <p className="mb-2 text-xs text-muted-foreground">Click a provider to see its models and rates.</p>
+              <p className="mb-2 text-sm font-semibold">Default LLM rates ($/1M input / $/1M output)</p>
               <div className="space-y-2">
                 {byProvider.map(([provider, models]) => (
                   <RatesDisclosure key={provider} provider={provider} models={models} />
                 ))}
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Caveats accounted for where they apply: Gemini Pro ~2× above 200k input tokens; Perplexity adds a
-                per-request search fee; Anthropic Opus 4.7+ uses ~35% more tokens for the same text.
+                Caveats accounted for where they apply: Gemini Pro ~2× above 200k input tokens;
+                Perplexity adds a per-request search fee; Anthropic Opus 4.7+ uses ~35% more tokens
+                for the same text.
               </p>
             </section>
 
@@ -620,92 +521,67 @@ export default function PricingExplainerPage() {
               <H
                 id="calculation"
                 eyebrow="Putting it together"
-                title="How the total is calculated"
-                sub="Each workload is priced independently, then summed. Platform and LLM are computed on separate axes."
+                title="How the Total Is Calculated"
+                sub="Everything is deterministic — the calculator estimates the design, then the engine does all the money math."
               />
-              <Card className="bg-muted/30 font-mono text-xs leading-relaxed">
-                <div>price_per_run = rate for the workload&apos;s tier &amp; runtime band</div>
-                <div>platform(workload) = price_per_run × runs</div>
-                <div>llm(workload) = Σ(call tokens × provider rate) × runs &nbsp;(0 if BYO)</div>
-                <div className="mt-2 text-foreground">Total = Σ platform + Σ llm</div>
-              </Card>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Never multiply runs × nodes — nodes only select the band. When a Superflow&apos;s branches land in
-                different node bands, each path is priced and blended by how often it&apos;s taken.
+              <ol className="space-y-2 text-sm">
+                {[
+                  ["Estimate tokens per model call", "For each node/agent call in a run, estimate input + output tokens (input includes the full context: system prompt, tool defs, history, retrieved docs)."],
+                  ["Sum to APCs per run", "APCs/run = Σ(input + output) across all calls. Non-LLM steps (HTTP, Code, If) consume no APCs."],
+                  ["Multiply by annual runs", "Annual APCs = APCs/run × runs per year, for each workload, summed across the whole use case."],
+                  ["Apply the deployment rate", `Platform cost = total annual APCs × $${vpcRate}/M (VPC) or $${saasRate}/M (SaaS).`],
+                  ["Add LLM pass-through", "LLM cost = Σ(tokens × provider rate), or $0 on the Lyzr bill if the customer brings their own model."],
+                  ["Recommend a plan", "The engine picks the smallest standard plan whose capacity covers the annual APCs (or flags a strategic Unlimited-Credits case)."],
+                ].map(([q, a], i) => (
+                  <li key={q} className="flex gap-3 rounded-lg border bg-card px-3 py-2.5">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {i + 1}
+                    </span>
+                    <span>
+                      <span className="font-medium">{q}</span>{" "}
+                      <span className="text-muted-foreground">— {a}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Because a single use case is usually far smaller than a plan&apos;s capacity, the
+                calculator shows the <strong className="text-foreground">usage cost</strong> (APCs ×
+                rate) as the headline and notes which plan it fits within.
               </p>
-
-              <h4 className="mt-5 mb-2 text-sm font-semibold">Worked example — &ldquo;Dashboard + chat over data&rdquo; (SaaS)</h4>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Card>
-                  <Pill>Single Agent</Pill>
-                  <h5 className="mt-2 font-semibold text-sm">Chat with the data</h5>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    50,000 messages/yr × {money(SIMPLE_RATE.cloud)} = <strong className="text-foreground">$3,000</strong>{" "}
-                    platform. LLM ≈ $105 (gemini-2.5-flash, 1 call/run).
-                  </p>
-                </Card>
-                <Card>
-                  <Pill>Superflow</Pill>
-                  <h5 className="mt-2 font-semibold text-sm">Data analysis pipeline</h5>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    365 runs/yr, 8 nodes → 1–10 band → {money(SUPERFLOW_BANDS[0].cloud)}/run ={" "}
-                    <strong className="text-foreground">$109.50</strong> platform. LLM ≈ $3.
-                  </p>
-                </Card>
-              </div>
-              <div className="mt-3 rounded-lg border-2 border-primary bg-primary/10 px-4 py-3 text-sm">
-                <strong>Total ≈ $3,217/yr</strong> — Platform $3,109.50 + LLM ~$108. Platform is driven by chat{" "}
-                <em>volume</em>; LLM is small here. The two axes move independently.
-              </div>
             </section>
 
             {/* ROI */}
             <section>
               <H
                 id="roi"
-                eyebrow="Value, honestly"
-                title="ROI analysis"
-                sub="We compare the AI solution's true annual cost against the loaded human cost of doing the same work — and we never overstate it."
+                eyebrow="Value vs. cost"
+                title="ROI Analysis"
+                sub="We compare the all-in AI cost against what the same work costs done manually, honestly accounting for any human still in the loop."
               />
               <div className="space-y-2 text-sm text-muted-foreground">
-                <Card>
-                  <h4 className="text-sm font-semibold text-foreground">Human baseline</h4>
-                  <p className="mt-1">
-                    A fully-loaded hourly rate (US median × 1.3) for the role the work replaces, times the minutes per
-                    unit, times the annual volume.
-                  </p>
-                </Card>
-                <Card>
-                  <h4 className="text-sm font-semibold text-foreground">Honest about human-in-the-loop</h4>
-                  <p className="mt-1">
-                    If the design keeps a person in the loop, the AI does <strong>not</strong> replace 100% of the labor.
-                    We fold the retained human time back into the AI-solution cost:
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    <li>
-                      • <strong className="text-foreground">Mandatory sign-off on every run</strong> (e.g. a lawyer
-                      approves every contract) → a short review time per unit is added back.
-                    </li>
-                    <li>
-                      • <strong className="text-foreground">Confidence-gated escalation</strong> (only a fraction reaches
-                      a human) → that fraction&apos;s review time is added back.
-                    </li>
-                  </ul>
-                </Card>
-                <Card>
-                  <h4 className="text-sm font-semibold text-foreground">What we report</h4>
-                  <p className="mt-1">
-                    Net annual savings and %, payback period, and <strong>time savings measured as reduction in human
-                    effort</strong> (not just AI speed). A design that still needs 12 min of human review per unit vs 60
-                    min manual is an 80% time saving — we never claim 95%.
-                  </p>
-                </Card>
+                <p>
+                  <strong className="text-foreground">Human cost</strong> = the mapped role&apos;s
+                  fully-loaded hourly rate × minutes per unit × annual volume.
+                </p>
+                <p>
+                  <strong className="text-foreground">All-in AI cost</strong> = Lyzr platform (APCs ×
+                  rate) + LLM paid to the provider (shown as pass-through, counted even when BYO) +
+                  any retained human review time.
+                </p>
+                <p>
+                  <strong className="text-foreground">Honest human-in-the-loop.</strong> If the design
+                  keeps a person for approval or escalation, only the automated fraction is credited —
+                  the residual review time stays in the AI column, so savings are never overstated as
+                  &quot;100% replaced.&quot;
+                </p>
+                <p>
+                  We report yearly savings, savings %, payback period, and ROI % — all computed from
+                  the same numbers shown in the panel, so the chat and the breakdown can never
+                  disagree.
+                </p>
               </div>
             </section>
-
-            <footer className="border-t pt-6 pb-2 text-center text-xs text-muted-foreground">
-              Every rate and rule on this page is the exact logic the calculator runs. Questions? Ask the Lyzr team.
-            </footer>
           </div>
         </main>
       </div>
