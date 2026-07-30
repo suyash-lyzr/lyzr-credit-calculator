@@ -145,7 +145,14 @@ Cost matters — default to the CHEAPEST model that clears the node's quality ba
 - LONG-CONTEXT (very large documents): gemini-2.5-pro, gemini-3.1-pro-preview.
 Rule of thumb: don't put Opus on a node a cheap model handles (wastes money), and don't put a cheap model on a node that genuinely needs reasoning or quality (loses trust). Example mix in one Superflow: gpt-5.4-mini to classify -> sonar-pro to research -> claude-sonnet-4-6 to draft the hard part -> gpt-5.4-mini to format/log.
 
-Token estimates per call (input_tokens INCLUDE full context — system prompt, tool defs, history, retrieved docs — but stay REALISTIC): routing/classify 800/150 · chat+KB/RAG 4,000/600 · doc field-extraction 8,000/1,200 · planning/reasoning 6,000/1,500 · long-doc 15,000/2,000. A KB/RAG call that pulls a few articles is ~3,000-8,000 input — only exceed ~15,000 input for genuinely long documents, and only reach 40,000+ for very large files. Do NOT put 30k-60k input on a routine support/chat/classification call. Use these consistently so re-running the SAME use case yields the SAME estimate.
+TOKEN ESTIMATES — USE THESE EXACT VALUES (do NOT invent your own numbers). Classify each model call into ONE bucket below and copy its input/output values verbatim. This is what makes the SAME use case price the SAME every time.
+  - routing / classification / tagging / short extraction ....... 800 in / 150 out
+  - chat, Q&A, KB-or-RAG answer, drafting a reply ............... 4,000 in / 600 out
+  - document field-extraction (invoice, resume, form, PDF) ...... 8,000 in / 1,200 out
+  - planning, reasoning, scoring, validation, quality check ..... 6,000 in / 1,500 out
+  - long-document analysis (contract, report, transcript) ....... 15,000 in / 2,000 out
+  - very large file / whole-corpus analysis ..................... 40,000 in / 2,500 out
+These inputs ALREADY include the full context (system prompt, tool definitions, history, retrieved documents), so do NOT inflate them further. Only deviate from a bucket when the use case genuinely demands it (e.g. an unusually large document) — and if you do, say why in the workload's runs_rationale. Do NOT use a long-document or very-large-file bucket for a routine support/chat/classification call.
 
 Set deployment to "cloud" (SaaS) or "vpc" (on-prem) per the user. Provide agent_architecture_summary. The workload NAMES should match generate_architecture.`,
     input_schema: {
@@ -264,7 +271,7 @@ TIME SAVINGS must reflect the reduction in HUMAN effort, not AI compute latency.
           type: "object",
           properties: {
             cost_per_unit: { type: "number", description: "all-in AI cost per unit = (Lyzr platform + LLM paid to provider, incl. BYO pass-through) / annual unit volume" },
-            time_per_task_seconds: { type: "number" },
+            time_per_task_seconds: { type: "number", description: "AI COMPUTE time per unit in seconds (how long the model calls take end-to-end). Typically 10-90s. EXCLUDE any human approval/review wait time and any queue/idle time — that is captured separately by residual_human_minutes_per_unit. Never report minutes or hours here." },
             automation_rate: { type: "number", description: "Fraction of units handled end-to-end with NO human touch (0-1). 1.0 only if the design is fully autonomous (no human node). < 1 if there is any HITL / approval / review / escalation node." },
             residual_human_minutes_per_unit: { type: "number", description: "Avg human minutes still spent per unit after automation, amortized across ALL units = (1 - automation_rate) x review_minutes_per_escalated_unit. 0 if fully autonomous." },
           },
@@ -595,6 +602,11 @@ function buildRoiArtifact(
     num(creditArtifact.llm_annual_cost) === 0 &&
     aiLlmAnnualCost > 0;
 
+  // AI COMPUTE latency only. Models sometimes fold the human approval wait into this (yielding
+  // absurd "< 20 min AI" displays), so clamp to a plausible compute range — the retained human
+  // time is already accounted for separately by residual_human_minutes_per_unit.
+  const aiTimeSeconds = Math.min(300, Math.max(1, num(ai.time_per_task_seconds, 30)));
+
   const { comparison, aiCostPerUnit, unitsPerMonth: computedUnitsPerMonth, roiPercentage } =
     computeRoiComparison({
       unitsPerYear,
@@ -604,7 +616,7 @@ function buildRoiArtifact(
       aiPlatformAnnualCost,
       aiLlmAnnualCost,
       aiLlmIsPassThrough,
-      aiTimeSeconds: num(ai.time_per_task_seconds),
+      aiTimeSeconds,
       automationRate,
       residualMinutesPerUnit: residualMinutes,
     });
@@ -616,6 +628,7 @@ function buildRoiArtifact(
       // Override with credits-derived per-unit so the UI's (cost_per_unit x volume) reconstructs
       // exactly the real Lyzr bill instead of the model's estimate.
       cost_per_unit: aiCostPerUnit,
+      time_per_task_seconds: aiTimeSeconds, // clamped: compute time only, not human wait
       automation_rate: automationRate,
       residual_human_minutes_per_unit: residualMinutes,
     },
