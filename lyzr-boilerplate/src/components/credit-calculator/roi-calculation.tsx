@@ -163,7 +163,11 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
                 {"< "}{Math.ceil(data.ai_analysis.time_per_task_seconds / 60)} min AI
                 {hasResidualHuman ? (
                   <span className="text-muted-foreground">
-                    {" "}+ ~{Math.round(residualMinutesPerUnit)} min review
+                    {" "}+ ~
+                    {Number.isInteger(residualMinutesPerUnit)
+                      ? residualMinutesPerUnit
+                      : residualMinutesPerUnit.toFixed(1)}{" "}
+                    min review
                   </span>
                 ) : (
                   <span className="text-muted-foreground"> (Parallel)</span>

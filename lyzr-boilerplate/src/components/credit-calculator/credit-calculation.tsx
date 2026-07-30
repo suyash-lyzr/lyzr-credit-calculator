@@ -6,7 +6,6 @@ import {
   IconCloud,
   IconShieldLock,
   IconCalculator,
-  IconBrain,
   IconUser,
   IconUsersGroup,
   IconSitemap,
@@ -52,6 +51,13 @@ function formatNumber(value: number | string | undefined) {
   if (value === undefined) return "—";
   if (typeof value === "string") return value;
   return new Intl.NumberFormat("en-US").format(Math.round(value));
+}
+
+/** Compact APC/token count: 1.40B, 182.0M, 10,800. */
+function fmtApc(n: number) {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  return formatNumber(Math.round(n));
 }
 
 const TIER_META: Record<
@@ -158,17 +164,14 @@ function WorkloadCard({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm">{w.name}</span>
             <TierBadge complexity={w.complexity} />
+            {w.apc_profile_label && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                {w.apc_profile_label}
+              </span>
+            )}
           </div>
-          {(w.apc_profile_label || typeof w.apc_per_run === "number") && (
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              {typeof w.apc_per_run === "number"
-                ? `${formatNumber(w.apc_per_run)} APCs (tokens) per run`
-                : ""}
-              {w.apc_profile_label ? ` · ${w.apc_profile_label}` : ""}
-            </p>
-          )}
           {w.reasoning && (
-            <p className="text-[11px] text-foreground/60 italic mt-0.5">{w.reasoning}</p>
+            <p className="text-[11px] text-foreground/60 mt-0.5">{w.reasoning}</p>
           )}
         </div>
         <div className="text-right shrink-0">
@@ -217,32 +220,36 @@ function WorkloadCard({
         </div>
       )}
 
-      {/* Numbers row */}
-      <div className="grid grid-cols-4 gap-px bg-border text-center text-xs">
-        <div className="bg-background px-2 py-1.5">
-          <div className="text-[10px] text-muted-foreground">Runs/yr</div>
-          <div className="font-mono font-medium">{formatNumber(w.runs_per_period)}</div>
-        </div>
-        <div className="bg-background px-2 py-1.5">
-          <div className="text-[10px] text-muted-foreground">APCs/run</div>
-          <div className="font-mono font-medium">{formatNumber(w.apc_per_run ?? 0)}</div>
-        </div>
-        <div className="bg-background px-2 py-1.5">
-          <div className="text-[10px] text-muted-foreground">Platform</div>
-          <div className="font-mono font-medium">{formatCurrency(w.platform_cost ?? 0)}</div>
-        </div>
-        <div className="bg-background px-2 py-1.5">
-          <div className="text-[10px] text-muted-foreground">LLM</div>
-          <div className="font-mono font-medium">
-            {w.byo_model ? (
-              <span title="Bring your own model — paid to provider, not on the Lyzr bill">
-                $0 <span className="text-[9px] text-muted-foreground">BYO</span>
-              </span>
-            ) : (
-              formatCurrency(w.llm_cost ?? 0)
-            )}
-          </div>
-        </div>
+      {/* How this workload's cost is built — one readable equation instead of a stat grid */}
+      <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 border-t bg-muted/20 px-3 py-2 text-[11px] leading-relaxed">
+        <span className="font-mono font-semibold">{formatNumber(w.runs_per_period)}</span>
+        <span className="text-muted-foreground">runs/yr</span>
+        <span className="text-muted-foreground/70">×</span>
+        <span className="font-mono font-semibold">{formatNumber(w.apc_per_run ?? 0)}</span>
+        <span className="text-muted-foreground">tokens (APCs) per run</span>
+        <span className="text-muted-foreground/70">=</span>
+        <span className="font-mono font-semibold">{fmtApc(w.annual_apc ?? 0)}</span>
+        <span className="text-muted-foreground">APCs/yr</span>
+        <span className="text-muted-foreground/70">→</span>
+        <span className="font-mono font-semibold text-primary">
+          {formatCurrency(w.platform_cost ?? 0)}
+        </span>
+        <span className="text-muted-foreground">platform</span>
+        <span className="text-muted-foreground/70">+</span>
+        {w.byo_model ? (
+          <span
+            className="font-mono font-semibold"
+            title="Bring your own model — LLM paid to the provider, $0 on the Lyzr bill"
+          >
+            {formatCurrency(w.llm_cost_external ?? 0)}{" "}
+            <span className="font-sans font-normal text-muted-foreground">LLM (BYO, to provider)</span>
+          </span>
+        ) : (
+          <span className="font-mono font-semibold">
+            {formatCurrency(w.llm_cost ?? 0)}{" "}
+            <span className="font-sans font-normal text-muted-foreground">LLM</span>
+          </span>
+        )}
       </div>
 
       {/* LLM call detail */}
@@ -272,12 +279,14 @@ function WorkloadCard({
                 </thead>
                 <tbody className="divide-y">
                   {calls.map((c, i) => (
-                    <tr key={i}>
+                    <tr key={i} className="odd:bg-muted/10">
                       <td className="py-2 px-3 align-top max-w-[15rem]">
-                        <div className="font-medium">
+                        <div className="flex flex-wrap items-center gap-1.5 font-medium">
                           {c.label ?? "—"}
                           {c.node_type && (
-                            <span className="ml-1 font-normal text-muted-foreground">({c.node_type})</span>
+                            <span className="rounded bg-muted px-1.5 py-px text-[9px] font-normal uppercase tracking-wide text-muted-foreground">
+                              {c.node_type}
+                            </span>
                           )}
                         </div>
                         {c.purpose && (
@@ -285,12 +294,14 @@ function WorkloadCard({
                         )}
                       </td>
                       <td className="py-2 px-3 align-top max-w-[14rem]">
-                        <div className="font-medium">{c.model}</div>
-                        {c.provider && (
-                          <div className="text-[10px] text-muted-foreground">{c.provider}</div>
-                        )}
+                        <div className="font-medium">
+                          {c.model}
+                          {c.provider && (
+                            <span className="ml-1 font-normal text-[10px] text-muted-foreground">· {c.provider}</span>
+                          )}
+                        </div>
                         {c.model_rationale && (
-                          <div className="mt-0.5 text-[10px] italic leading-snug text-muted-foreground">
+                          <div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
                             {c.model_rationale}
                           </div>
                         )}
@@ -385,20 +396,18 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
   const allInTotal = platformTotal + llmExternal; // platform + all LLM the customer pays
   const totalApc = data.total_annual_apc ?? workloads.reduce((s, w) => s + (w.annual_apc ?? 0), 0);
   const apcRatePerM = data.apc_rate_per_m ?? (isCloud ? 20 : 5);
-  const rec = data.recommended_tier; // recommended plan (or strategic flag)
-  const fmtApc = (n: number) =>
-    n >= 1e9 ? `${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : formatNumber(Math.round(n));
+  const rec = data.recommended_tier; // strategic flag (plan sizing is an account-level conversation)
 
   return (
     <div className="space-y-5">
       {/* Intro + edit toggle */}
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-foreground/80">
-          <span className="font-semibold">Platform cost is metered in APCs.</span>{" "}
-          <span className="font-medium">1 APC = 1 token</span> — a small chunk of text (~4
-          characters) a model reads (input) or writes (output). Platform cost = total APCs ×{" "}
-          {isCloud ? "$20" : "$5"} per 1M ({isCloud ? "SaaS" : "VPC"}). LLM cost passes through at
-          provider rates &mdash; no markup.
+          <span className="font-semibold">Platform cost is metered in APCs</span>{" "}
+          <span className="text-muted-foreground">
+            (1 APC = 1 token — the text a model reads and writes)
+          </span>
+          . LLM cost passes through at provider rates &mdash; no markup.
         </p>
         {canEdit && (
           <button
@@ -422,30 +431,74 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
         </p>
       )}
 
-      {data.agent_architecture_summary && (
-        <div className="bg-muted/30 rounded-lg px-3 py-2">
-          <p className="text-sm text-foreground/70">
-            <span className="font-medium text-foreground">Architecture:</span>{" "}
-            {data.agent_architecture_summary}
+      {/* HEADLINE FIRST — the total, then how it splits. Details follow below. */}
+      <section className="space-y-2.5">
+        <div className="rounded-lg border-2 border-primary bg-primary/10 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-foreground">Total Annual Cost (all-in)</p>
+            <p className="text-2xl font-bold text-primary">{formatCurrency(allInTotal)}</p>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Platform ({formatCurrency(platformTotal)}) + LLM ({formatCurrency(llmExternal)}).
+            {llmPassThrough > 0
+              ? ` ${formatCurrency(llmPassThrough)} of LLM is pass-through paid to the provider — your Lyzr invoice is ${formatCurrency(lyzrInvoice)}.`
+              : ""}
           </p>
         </div>
-      )}
 
-      {/* Deployment */}
-      <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
-        {isCloud ? (
-          <IconCloud className="h-5 w-5 text-primary flex-shrink-0" />
-        ) : (
-          <IconShieldLock className="h-5 w-5 text-primary flex-shrink-0" />
+        <div className="grid grid-cols-2 gap-2.5">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+              Lyzr Platform
+            </p>
+            <p className="text-2xl font-bold text-primary mt-0.5">{formatCurrency(platformTotal)}</p>
+            <p className="text-[11px] text-foreground/60 mt-1">
+              {fmtApc(totalApc)} tokens (APCs)/yr × ${apcRatePerM} per 1M
+            </p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
+              LLM {hasByo ? "(Pass-through)" : "Pass-through"}
+            </p>
+            <p className="text-2xl font-bold text-foreground mt-0.5">{formatCurrency(llmExternal)}</p>
+            <p className="text-[11px] text-foreground/60 mt-1">
+              {hasByo
+                ? "Paid directly to the model provider (BYO) — $0 on your Lyzr invoice."
+                : "Billed at provider rates. No Lyzr markup."}
+            </p>
+          </div>
+        </div>
+
+        {/* Strategic flag only — per sales feedback, no plan recommendation for a single use case
+            (customers may run several use cases; plans are sized at the account level). */}
+        {rec && rec.strategic && (
+          <div className="rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-800">Strategic account — route to leadership</p>
+            <p className="mt-1 text-xs text-amber-800/80">
+              Estimated usage ({fmtApc(totalApc)} APCs/yr) exceeds the largest standard{" "}
+              {isCloud ? "SaaS" : "VPC"} plan. This looks like an Unlimited Credits deal ($500K+),
+              which needs leadership sign-off — not a self-serve plan.
+            </p>
+          </div>
         )}
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-foreground">
-            {isCloud ? "Lyzr SaaS" : "Customer VPC / On-Prem"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {isCloud
-              ? "Fully managed — SaaS rate card"
-              : "Customer environment — On-Prem rate card (lower per-run rates)"}
+      </section>
+
+      {/* Deployment — one compact line */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {isCloud ? (
+            <IconCloud className="h-4 w-4 text-primary flex-shrink-0" />
+          ) : (
+            <IconShieldLock className="h-4 w-4 text-primary flex-shrink-0" />
+          )}
+          <p className="text-xs truncate">
+            <span className="font-semibold text-foreground">
+              {isCloud ? "Lyzr SaaS" : "Customer VPC / On-Prem"}
+            </span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {isCloud ? "fully managed" : "your environment"} · ${apcRatePerM} per 1M APCs
+            </span>
           </p>
         </div>
         {editing && (
@@ -465,6 +518,13 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
           </div>
         )}
       </div>
+
+      {data.agent_architecture_summary && (
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/80">Architecture:</span>{" "}
+          {data.agent_architecture_summary}
+        </p>
+      )}
 
       {/* Workloads */}
       <section className="space-y-3">
@@ -486,70 +546,11 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
         </div>
       </section>
 
-      {/* Cost summary */}
-      <section className="space-y-2.5">
-        <div className="flex items-center gap-2">
-          <IconBrain className="h-4 w-4 text-foreground/80" />
-          <h3 className="text-sm font-bold uppercase tracking-wide text-foreground/80">
-            Cost Summary (Annual)
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-              Lyzr Platform
-            </p>
-            <p className="text-2xl font-bold text-primary mt-0.5">{formatCurrency(platformTotal)}</p>
-            <p className="text-[11px] text-foreground/60 mt-1">
-              {fmtApc(totalApc)} APCs (tokens)/yr × ${apcRatePerM} per 1M
-            </p>
-          </div>
-          <div className="rounded-lg border border-border bg-muted/30 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-foreground/70">
-              LLM {hasByo ? "(Pass-through)" : "Pass-through"}
-            </p>
-            <p className="text-2xl font-bold text-foreground mt-0.5">{formatCurrency(llmExternal)}</p>
-            <p className="text-[11px] text-foreground/60 mt-1">
-              {hasByo
-                ? "Paid directly to the model provider (BYO) — $0 on your Lyzr invoice."
-                : "Billed at provider rates. No Lyzr markup."}
-            </p>
-          </div>
-        </div>
-
-        <div className="rounded-lg border-2 border-primary bg-primary/10 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Total Annual Cost (all-in)</p>
-            <p className="text-2xl font-bold text-primary">{formatCurrency(allInTotal)}</p>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Platform ({formatCurrency(platformTotal)}) + LLM ({formatCurrency(llmExternal)}).
-            {llmPassThrough > 0
-              ? ` ${formatCurrency(llmPassThrough)} of LLM is pass-through paid to the provider — your Lyzr invoice is ${formatCurrency(lyzrInvoice)}.`
-              : ""}
-          </p>
-        </div>
-
-        {/* Strategic flag only — per sales feedback, no plan recommendation for a single use case
-            (customers may run several use cases; plans are sized at the account level). */}
-        {rec && rec.strategic && (
-          <div className="rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3">
-            <p className="text-sm font-semibold text-amber-800">Strategic account — route to leadership</p>
-            <p className="mt-1 text-xs text-amber-800/80">
-              Estimated usage ({fmtApc(totalApc)} APCs/yr) exceeds the largest standard{" "}
-              {isCloud ? "SaaS" : "VPC"} plan. This looks like an Unlimited Credits deal ($500K+),
-              which needs leadership sign-off — not a self-serve plan.
-            </p>
-          </div>
-        )}
-
-        <p className="text-[11px] text-muted-foreground">
-          APC = Agent Processing Credit. 1 APC = 1 token — every token a model reads (input) or
-          writes (output) counts, so the same token estimates drive both the platform cost and the
-          LLM cost.
-        </p>
-      </section>
+      <p className="text-[11px] text-muted-foreground">
+        APC = Agent Processing Credit. 1 APC = 1 token — every token a model reads (input) or
+        writes (output) counts, so the same token estimates drive both the platform cost and the
+        LLM cost.
+      </p>
 
       {data.notes && (
         <p className="text-[11px] text-muted-foreground italic">{data.notes}</p>
