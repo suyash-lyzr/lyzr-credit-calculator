@@ -137,13 +137,18 @@ LLM COST (separate, pass-through, no markup) — provide llm_calls = the LLM-bea
 
 === MODEL SELECTION BY TASK COMPLEXITY (match model power to each node's job) ===
 Cost matters — default to the CHEAPEST model that clears the node's quality bar, and MIX models across nodes within one workflow. ALWAYS prefer the LATEST version in a family. Use this ladder to pick:
-- TRIVIAL / high-volume (routing, classification, tagging, simple extraction, short canned replies): cheapest tier — gpt-5-nano, gpt-5.4-nano, gemini-2.5-flash-lite, claude-haiku-4-5, nova-micro.
+- TRIVIAL / high-volume (routing, classification, tagging, single-value lookups, short canned replies): cheapest tier — gpt-5-nano, gpt-5.4-nano, gemini-2.5-flash-lite, claude-haiku-4-5, nova-micro.
 - GENERAL-PURPOSE (standard chat, Q&A, RAG answers, summaries, everyday drafting): use a GPT model — gpt-5.4-mini by default, gpt-5.4 or gpt-5.5 when a bit more capability helps. (Default general-purpose tasks to GPT.)
 - COMPLEX / HIGH-QUALITY (nuanced drafting, careful multi-field extraction, risk/quality analysis, coding): use Claude Sonnet — claude-sonnet-4-6 (gpt-5.5 is an alternative).
 - COMPLEX REASONING (hard multi-step planning, deep legal/financial reasoning, tricky trade-offs, high-stakes decisions): use Opus — claude-opus-4-8 (latest, priciest — use only where reasoning truly demands it); o3 or gpt-5.5 are reasoning alternatives.
 - RESEARCH / web search / news / "latest" info (REQUIRED for any search step — built-in web access): sonar (cheap), sonar-pro (quality), sonar-reasoning-pro / sonar-deep-research (heavy). Never use a plain chat model for the actual web-search step.
 - LONG-CONTEXT (very large documents): gemini-2.5-pro, gemini-3.1-pro-preview.
 Rule of thumb: don't put Opus on a node a cheap model handles (wastes money), and don't put a cheap model on a node that genuinely needs reasoning or quality (loses trust). Example mix in one Superflow: gpt-5.4-mini to classify -> sonar-pro to research -> claude-sonnet-4-6 to draft the hard part -> gpt-5.4-mini to format/log.
+
+MINIMUM-TIER GUARDRAIL (never violate): a nano/lite-class model (gpt-5-nano, gpt-5.4-nano, gemini-2.5-flash-lite, nova-micro) may ONLY be used for routing, classification, tagging, or a single-value lookup. It must NEVER be used for:
+- DOCUMENT FIELD-EXTRACTION — pulling multiple structured fields out of a document (invoice, PO, resume, contract, form, statement, ID). Use gpt-5.4-mini at minimum; use claude-sonnet-4-6 when the extraction feeds a financial, legal, compliance, or payment decision, or when source formats vary a lot (e.g. invoices from many different ERPs).
+- Validation / matching / scoring / risk or quality checks, drafting customer-facing text, or anything a human would be held accountable for.
+Getting these wrong is a false economy: a few dollars of model savings against a wrong payment, a mis-parsed contract, or a bad customer reply. When in doubt on an extraction or decision node, go one tier UP and say why in model_rationale.
 
 TOKEN ESTIMATES — USE THESE EXACT VALUES (do NOT invent your own numbers). Classify each model call into ONE bucket below and copy its input/output values verbatim. This is what makes the SAME use case price the SAME every time.
   - routing / classification / tagging / short extraction ....... 800 in / 150 out
@@ -313,7 +318,7 @@ Checks:
 1. Orchestration: each workload classified correctly (the classification names the capability that forced a Manager/Superflow). Superflow only when a special node is needed (approval, If/Switch/Loop/Filter, HTTP/Code/Parse, AI Swarm, durable waits, fixed pipeline) — NOT merely because of a schedule.
 2. APCs: each run's APCs = Σ(input+output) across its model calls; input_tokens include full context (system prompt, tool defs, history, retrieved docs); per-run totals are realistic vs the reference profiles (single ~15K–50K, multi-agent ~100K–300K). Not under-counted.
 3. Runs: runs_per_period realistic per workload; chat = 1 run/message; scheduled fires counted; rework that re-triggers adds runs (looping inside one run adds APCs, not runs).
-4. LLM: llm_calls present for every LLM-bearing execution; models from the real catalog; cheapest-that-clears-the-bar; mixed across nodes; tokens reasonable. LLM tied to executions, not run count.
+4. LLM: llm_calls present for every LLM-bearing execution; models from the real catalog; cheapest-that-clears-the-bar; mixed across nodes; tokens reasonable. LLM tied to executions, not run count. MINIMUM-TIER CHECK (flag as critical): no nano/lite-class model (gpt-5-nano, gpt-5.4-nano, gemini-2.5-flash-lite, nova-micro) on a document field-extraction, validation/matching, scoring, risk/quality, or customer-facing drafting node — those need gpt-5.4-mini at minimum, or claude-sonnet-4-6 when the step feeds a financial/legal/compliance decision or the source formats vary widely. Nano is only acceptable for routing, classification, tagging, or a single-value lookup.
 5. Deployment correct (cloud/vpc). BYO flag correct.
 6. ROI: ai cost_per_unit = all-in (Lyzr platform + LLM paid to provider incl. BYO) / unit volume; savings computed against the all-in cost and plausible; LLM shown as pass-through. HITL CONSISTENCY: if any workload has a human node (Wait-for-Approval / review / escalation / confidence gate to a person), automation_rate MUST be < 1 and residual_human_minutes_per_unit > 0 — flag as critical if the ROI claims 100% automation while the architecture shows a human node. Conversely a fully autonomous design must have automation_rate = 1.
 
