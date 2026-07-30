@@ -40,6 +40,18 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
     return w;
   };
 
+  // "a AP Clerk" -> "an AP Clerk". Uses vowel SOUND, so initialisms like AP/HR/RN (spoken
+  // "ay-pee", "aitch-arr") take "an" even though they start with a consonant letter.
+  const article = (word: string) => {
+    const w = (word || "").trim();
+    if (!w) return "a";
+    const first = w[0];
+    if (/^[AEIOU]$/i.test(first)) return "an";
+    // Initialism (2+ leading capitals, e.g. "AP Clerk", "HR Analyst"): go by letter name.
+    if (/^[A-Z]{2,}/.test(w) && /^[FHLMNRSX]/.test(first)) return "an";
+    return "a";
+  };
+
   // Show whole-dollar rates as "$29", fractional loaded rates as "$28.60" — never round a
   // loaded rate to a different integer than the unit-cost math implies.
   const formatRate = (value: number) =>
@@ -165,7 +177,8 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
       </div>
 
       <p className="text-sm text-foreground/80">
-        Compared with a {data.human_analysis.mapped_role} at{" "}
+        Compared with {article(data.human_analysis.mapped_role)}{" "}
+        {data.human_analysis.mapped_role} at{" "}
         <span className="font-medium">{formatRate(data.human_analysis.fully_loaded_rate)}/hr</span>{" "}
         spending <span className="font-medium">{data.human_analysis.time_per_task_minutes} min</span>{" "}
         per {unit}.
