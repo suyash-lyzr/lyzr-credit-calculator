@@ -239,6 +239,10 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
   React.useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
+      // On a syntax error mermaid otherwise injects a huge "bomb / Syntax error in text" graphic
+      // into document.body, which escapes our container and lands at the bottom of the page. We
+      // render our own inline fallback instead.
+      suppressErrorRendering: true,
       theme: "base",
       themeVariables: {
         primaryColor: "#673F1B",
@@ -276,9 +280,9 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
   React.useEffect(() => {
     if (data?.mermaidCode) {
       const renderDiagram = async () => {
+        renderCountRef.current += 1;
+        const uniqueId = `mermaid-${renderCountRef.current}`;
         try {
-          renderCountRef.current += 1;
-          const uniqueId = `mermaid-${renderCountRef.current}`;
           let cleanCode = data.mermaidCode
             .replace(/```mermaid\n?/g, "")
             .replace(/```\n?/g, "")
@@ -295,6 +299,13 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
             .replace(/:::[A-Za-z0-9_-]+/g, "")
             .replace(/\n{3,}/g, "\n\n")
             .trim();
+          // Robustness: mermaid throws "Syntax error in text" when a node label contains
+          // parentheses/braces and isn't quoted — e.g. A[Notify (urgent)]. Quote any unquoted
+          // [..] / {..} / (..) label containing those characters so a stray paren can't break
+          // the whole diagram.
+          cleanCode = cleanCode
+            .replace(/\[([^[\]"]*[(){}][^[\]"]*)\]/g, '["$1"]')
+            .replace(/\{([^{}"]*[()[\]][^{}"]*)\}/g, '{"$1"}');
           // Superflows should read left-to-right (like Lyzr Studio). If every workload is a
           // Superflow, force the top-level graph to LR. Manager/Single stay vertical (TD).
           const allComplex =
@@ -304,14 +315,37 @@ export function ArchitectureDiagram({ data, isLoading }: ArchitectureDiagramProp
           if (allComplex) {
             cleanCode = cleanCode.replace(/^graph\s+(TD|TB)\b/i, "graph LR");
           }
-          const { svg } = await mermaid.render(uniqueId, cleanCode);
+          // Mermaid lazy-loads a chunk per diagram type. After a rebuild/redeploy the old chunk
+          // hash can 404 ("Failed to load chunk ... flowDiagram-*.mjs"), which is transient — one
+          // retry picks up the new chunk instead of leaving the panel broken.
+          let svg: string;
+          try {
+            ({ svg } = await mermaid.render(uniqueId, cleanCode));
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (/load chunk|dynamically imported module|Importing a module script failed/i.test(msg)) {
+              renderCountRef.current += 1;
+              ({ svg } = await mermaid.render(`mermaid-${renderCountRef.current}`, cleanCode));
+            } else {
+              throw err;
+            }
+          }
           setSvgContent(svg);
         } catch (error) {
-          console.error("[Mermaid] Rendering error:", error);
-          setSvgContent(`<div class="text-red-500 p-4 text-center">
-            <p class="font-medium">Diagram rendering failed</p>
-            <p class="text-xs mt-1">Please try again</p>
+          console.warn("[Mermaid] Rendering error:", error);
+          setSvgContent(`<div class="flex h-full items-center justify-center p-4 text-center">
+            <div>
+              <p class="text-sm font-medium text-foreground">Diagram couldn't be drawn</p>
+              <p class="mt-1 text-xs text-muted-foreground">The cost and ROI figures below are unaffected.</p>
+            </div>
           </div>`);
+        } finally {
+          // Belt-and-braces: remove any stray element mermaid left on <body> for a failed render.
+          document
+            .querySelectorAll(`#d${uniqueId}, #${uniqueId}`)
+            .forEach((el) => {
+              if (el.parentElement === document.body) el.remove();
+            });
         }
       };
       renderDiagram();

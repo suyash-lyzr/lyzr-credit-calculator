@@ -195,7 +195,9 @@ export default function CreditCalculatorPage() {
           router.replace("/login?next=/credit-calculator");
         }
       } catch (e) {
-        console.error("Failed to persist session:", e);
+        // Best-effort background save (fires on unload / tab switch / dev-server restart), so a
+        // transient network failure is expected and must not surface as an app error.
+        console.warn("Session save skipped (network unavailable):", e);
       }
     },
     [sessions, activeSessionId, artifactState, sessionArtifacts, router]
