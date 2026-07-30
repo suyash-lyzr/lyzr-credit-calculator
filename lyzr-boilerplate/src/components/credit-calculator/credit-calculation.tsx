@@ -183,9 +183,9 @@ function WorkloadCard({
   const changeTier = (complexity: Complexity) => onUpdate?.({ complexity });
 
   return (
-    <div className="rounded-lg border bg-input-bg/40 overflow-hidden">
+    <div className="rounded-lg border bg-background overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+      <div className="flex items-start justify-between gap-3 px-3 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm">{w.name}</span>
@@ -197,12 +197,12 @@ function WorkloadCard({
             )}
           </div>
           {w.reasoning && (
-            <p className="text-[11px] text-foreground/60 mt-0.5">{w.reasoning}</p>
+            <p className="text-[11px] leading-relaxed text-muted-foreground mt-1">{w.reasoning}</p>
           )}
         </div>
         <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-primary">{formatCurrency(w.total_cost ?? 0)}</p>
-          <p className="text-[10px] text-muted-foreground">/ year</p>
+          <p className="text-base font-bold text-primary">{formatCurrency(w.total_cost ?? 0)}</p>
+          <p className="text-[10px] text-muted-foreground">per year</p>
         </div>
       </div>
 
@@ -246,81 +246,86 @@ function WorkloadCard({
         </div>
       )}
 
-      {/* How this workload's cost is built — one readable equation instead of a stat grid */}
-      <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 border-t bg-muted/20 px-3 py-2 text-[11px] leading-relaxed">
-        <span className="font-mono font-semibold">{formatNumber(w.runs_per_period)}</span>
-        <span className="text-muted-foreground">runs/yr</span>
-        <span className="text-muted-foreground/70">×</span>
-        <span className="font-mono font-semibold">{formatNumber(w.apc_per_run ?? 0)}</span>
-        <span className="text-muted-foreground">tokens (APCs) per run</span>
-        <span className="text-muted-foreground/70">=</span>
-        <span className="font-mono font-semibold">{fmtApc(w.annual_apc ?? 0)}</span>
-        <span className="text-muted-foreground">APCs/yr</span>
-        <span className="text-muted-foreground/70">→</span>
-        <span className="font-mono font-semibold text-primary">
-          {formatCurrency(w.platform_cost ?? 0)}
-        </span>
-        <span className="text-muted-foreground">platform</span>
-        <span className="text-muted-foreground/70">+</span>
-        {w.byo_model ? (
-          <span
-            className="font-mono font-semibold"
-            title="Bring your own model — LLM paid to the provider, $0 on the Lyzr bill"
-          >
-            {formatCurrency(w.llm_cost_external ?? 0)}{" "}
-            <span className="font-sans font-normal text-muted-foreground">LLM (BYO, to provider)</span>
-          </span>
-        ) : (
-          <span className="font-mono font-semibold">
-            {formatCurrency(w.llm_cost ?? 0)}{" "}
-            <span className="font-sans font-normal text-muted-foreground">LLM</span>
-          </span>
-        )}
+      {/* How this workload's cost is built — scannable stats, with the formula as a caption */}
+      <div className="grid grid-cols-4 gap-px border-t bg-border">
+        {[
+          { label: "Runs / year", value: formatNumber(w.runs_per_period) },
+          { label: "APCs per run", value: formatNumber(w.apc_per_run ?? 0) },
+          { label: "APCs / year", value: fmtApc(w.annual_apc ?? 0) },
+          {
+            label: w.byo_model ? "Platform (LLM is BYO)" : "Platform",
+            value: formatCurrency(w.platform_cost ?? 0),
+            accent: true,
+          },
+        ].map((s) => (
+          <div key={s.label} className="bg-background px-3 py-2">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{s.label}</p>
+            <p
+              className={`mt-0.5 font-mono text-xs font-semibold ${
+                s.accent ? "text-primary" : "text-foreground"
+              }`}
+            >
+              {s.value}
+            </p>
+          </div>
+        ))}
       </div>
+      <p className="border-t bg-muted/20 px-3 py-1.5 text-[10px] text-muted-foreground">
+        runs × APCs per run = APCs / year, billed at the deployment rate. LLM adds{" "}
+        <span className="font-mono">
+          {formatCurrency(w.byo_model ? w.llm_cost_external ?? 0 : w.llm_cost ?? 0)}
+        </span>
+        {w.byo_model ? " paid directly to the provider." : " at provider rates."}
+      </p>
 
       {/* LLM call detail */}
       {hasCalls && (
         <div className="border-t">
           <button
             onClick={() => setOpen((o) => !o)}
-            className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+            className="flex w-full items-center gap-1.5 bg-muted/30 px-3 py-2 text-[11px] font-medium text-muted-foreground hover:text-foreground"
           >
             <IconChevronDown
               className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
             />
-            {calls.length} LLM call{calls.length > 1 ? "s" : ""} / run — the input + output tokens
-            below are what add up to this workload&apos;s APCs
+            The {calls.length} model call{calls.length > 1 ? "s" : ""} in one run
             {w.byo_model && " (BYO — LLM paid to provider)"}
           </button>
           {open && (
             <div className="divide-y border-t">
               {calls.map((c, i) => (
-                <div key={i} className="px-3 py-2 odd:bg-muted/10">
-                  {/* Line 1: what runs, on which model, and what it costs */}
-                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
-                    <span className="font-medium">{c.label ?? "—"}</span>
-                    {c.node_type && (
-                      <span className="rounded bg-muted px-1.5 py-px text-[9px] uppercase tracking-wide text-muted-foreground">
-                        {c.node_type}
-                      </span>
-                    )}
-                    <span className="text-muted-foreground/60">·</span>
-                    <span className="font-medium">{c.model}</span>
-                    {c.provider && (
-                      <span className="text-[10px] text-muted-foreground">{c.provider}</span>
-                    )}
-                    <span className="ml-auto whitespace-nowrap font-mono text-muted-foreground">
-                      {formatNumber(c.input_tokens)} in / {formatNumber(c.output_tokens)} out
+                <div key={i} className="px-3 py-2.5">
+                  {/* Step: what runs — and what it costs */}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[11px] font-semibold">
+                      <span className="mr-1.5 text-muted-foreground">{i + 1}.</span>
+                      {c.label ?? "—"}
                     </span>
-                    <span className="whitespace-nowrap font-mono">
+                    <span className="shrink-0 font-mono text-[11px]">
                       {formatMicroCurrency(c.cost_per_call ?? 0)}
                     </span>
                   </div>
-                  {/* Line 2: what it does — why this model */}
-                  {(c.purpose || c.model_rationale) && (
-                    <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                  {/* Which model — and how many tokens it uses */}
+                  <div className="mt-1 flex items-baseline justify-between gap-3 text-[10px] text-muted-foreground">
+                    <span className="min-w-0 truncate">
+                      {c.node_type && <span className="uppercase tracking-wide">{c.node_type}</span>}
+                      {c.node_type && " · "}
+                      <span className="text-foreground/80">{c.model}</span>
+                      {c.provider && ` · ${c.provider}`}
+                    </span>
+                    <span className="shrink-0 font-mono">
+                      {formatNumber(c.input_tokens)} in / {formatNumber(c.output_tokens)} out
+                    </span>
+                  </div>
+                  {/* What it does, then why this model — separate lines, not a run-on */}
+                  {c.purpose && (
+                    <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
                       {c.purpose}
-                      {c.purpose && c.model_rationale ? " — " : ""}
+                    </p>
+                  )}
+                  {c.model_rationale && (
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground/70">
+                      <span className="text-muted-foreground/90">Why this model:</span>{" "}
                       {c.model_rationale}
                     </p>
                   )}
