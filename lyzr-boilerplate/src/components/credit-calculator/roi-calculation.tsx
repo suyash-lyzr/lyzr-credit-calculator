@@ -120,30 +120,56 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
 
   return (
     <div className="space-y-4">
+      {/* Headline numbers first — the story in four tiles, details in the table below */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="rounded-lg border-2 border-primary/50 bg-primary/10 px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+            Net savings / yr
+          </p>
+          <p className="mt-0.5 text-xl font-bold text-primary">{formatCurrency(netSavings)}</p>
+          <p className="text-[10px] text-muted-foreground">{savingsPercentage}% below manual cost</p>
+        </div>
+        <div className="rounded-lg border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">ROI</p>
+          <p className="mt-0.5 text-xl font-bold">
+            {typeof data.roi_percentage === "number" ? `${data.roi_percentage}%` : "—"}
+          </p>
+          <p className="text-[10px] text-muted-foreground">return on AI spend</p>
+        </div>
+        <div className="rounded-lg border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Payback
+          </p>
+          <p className="mt-0.5 text-xl font-bold">{data.comparison.payback_period_days} days</p>
+          <p className="text-[10px] text-muted-foreground">to recover year-1 cost</p>
+        </div>
+        <div className="rounded-lg border bg-card px-3 py-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Human time saved
+          </p>
+          <p className="mt-0.5 text-xl font-bold">{data.comparison.time_savings_percentage}%</p>
+          <p className="text-[10px] text-muted-foreground">per {data.unit_name}</p>
+        </div>
+      </div>
+
       <p className="text-sm text-foreground/80">
-        <span className="font-semibold">ROI Analysis: AI vs. Human Execution</span>{" "}
-        Comparison based on a standard {data.human_analysis.mapped_role} rate of{" "}
-        <span className="font-medium">{formatRate(data.human_analysis.fully_loaded_rate)}/hr</span> taking{" "}
-        <span className="font-medium">{data.human_analysis.time_per_task_minutes} minutes</span> per {data.unit_name}.
-        {hasResidualHuman && (
-          isEveryRunReview ? (
+        Compared with a {data.human_analysis.mapped_role} at{" "}
+        <span className="font-medium">{formatRate(data.human_analysis.fully_loaded_rate)}/hr</span>{" "}
+        spending <span className="font-medium">{data.human_analysis.time_per_task_minutes} min</span>{" "}
+        per {data.unit_name}.
+        {hasResidualHuman &&
+          (isEveryRunReview ? (
             <>
-              {" "}The AI does the heavy lifting, but every {data.unit_name} still gets a quick human
-              sign-off — about{" "}
-              <span className="font-medium">{reviewMinutesPerTouch} min</span> of {data.human_analysis.mapped_role}{" "}
-              review each (vs {data.human_analysis.time_per_task_minutes} min done fully by hand). That retained
-              review time is included below, so savings aren&apos;t overstated.
+              {" "}Every {data.unit_name} still gets a ~{reviewMinutesPerTouch}-min human sign-off —
+              that retained time is counted below, so savings aren&apos;t overstated.
             </>
           ) : (
             <>
-              {" "}This design keeps a human in the loop, so{" "}
-              <span className="font-medium">{Math.round(automationRate * 100)}%</span> of {data.unit_name}s are
-              handled end-to-end and the remaining{" "}
-              <span className="font-medium">{escalatedPct}%</span> still need ~{reviewMinutesPerTouch} min of human
-              review each — that residual labor is included below.
+              {" "}{Math.round(automationRate * 100)}% is handled end-to-end; the remaining{" "}
+              {escalatedPct}% still gets ~{reviewMinutesPerTouch} min of human review — counted
+              below.
             </>
-          )
-        )}
+          ))}
       </p>
 
       <div className="overflow-hidden rounded-lg border">

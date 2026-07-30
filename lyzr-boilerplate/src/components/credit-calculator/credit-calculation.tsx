@@ -140,6 +140,32 @@ function NumField({
   );
 }
 
+/** Collapsible fine print so assumptions don't crowd the main read. */
+function FinePrint({ notes }: { notes?: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="rounded-lg border bg-muted/20">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-[11px] text-muted-foreground hover:text-foreground"
+      >
+        <IconChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        Assumptions &amp; fine print
+      </button>
+      {open && (
+        <div className="space-y-1.5 border-t px-3 py-2">
+          <p className="text-[11px] text-muted-foreground">
+            APC = Agent Processing Credit. 1 APC = 1 token — every token a model reads (input) or
+            writes (output) counts, so the same token estimates drive both the platform cost and the
+            LLM cost.
+          </p>
+          {notes && <p className="text-[11px] text-muted-foreground italic">{notes}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WorkloadCard({
   w,
   editing,
@@ -267,55 +293,39 @@ function WorkloadCard({
             {w.byo_model && " (BYO — LLM paid to provider)"}
           </button>
           {open && (
-            <div className="overflow-x-auto border-t">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="bg-muted/40 text-left">
-                    <th className="py-1.5 px-3 font-medium">Node</th>
-                    <th className="py-1.5 px-3 font-medium">Model</th>
-                    <th className="py-1.5 px-3 font-medium text-right">Input / Output tokens</th>
-                    <th className="py-1.5 px-3 font-medium text-right">Cost/call</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {calls.map((c, i) => (
-                    <tr key={i} className="odd:bg-muted/10">
-                      <td className="py-2 px-3 align-top max-w-[15rem]">
-                        <div className="flex flex-wrap items-center gap-1.5 font-medium">
-                          {c.label ?? "—"}
-                          {c.node_type && (
-                            <span className="rounded bg-muted px-1.5 py-px text-[9px] font-normal uppercase tracking-wide text-muted-foreground">
-                              {c.node_type}
-                            </span>
-                          )}
-                        </div>
-                        {c.purpose && (
-                          <div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{c.purpose}</div>
-                        )}
-                      </td>
-                      <td className="py-2 px-3 align-top max-w-[14rem]">
-                        <div className="font-medium">
-                          {c.model}
-                          {c.provider && (
-                            <span className="ml-1 font-normal text-[10px] text-muted-foreground">· {c.provider}</span>
-                          )}
-                        </div>
-                        {c.model_rationale && (
-                          <div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-                            {c.model_rationale}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-2 px-3 font-mono text-right align-top whitespace-nowrap">
-                        {formatNumber(c.input_tokens)} / {formatNumber(c.output_tokens)}
-                      </td>
-                      <td className="py-2 px-3 font-mono text-right align-top">
-                        {formatMicroCurrency(c.cost_per_call ?? 0)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y border-t">
+              {calls.map((c, i) => (
+                <div key={i} className="px-3 py-2 odd:bg-muted/10">
+                  {/* Line 1: what runs, on which model, and what it costs */}
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+                    <span className="font-medium">{c.label ?? "—"}</span>
+                    {c.node_type && (
+                      <span className="rounded bg-muted px-1.5 py-px text-[9px] uppercase tracking-wide text-muted-foreground">
+                        {c.node_type}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground/60">·</span>
+                    <span className="font-medium">{c.model}</span>
+                    {c.provider && (
+                      <span className="text-[10px] text-muted-foreground">{c.provider}</span>
+                    )}
+                    <span className="ml-auto whitespace-nowrap font-mono text-muted-foreground">
+                      {formatNumber(c.input_tokens)} in / {formatNumber(c.output_tokens)} out
+                    </span>
+                    <span className="whitespace-nowrap font-mono">
+                      {formatMicroCurrency(c.cost_per_call ?? 0)}
+                    </span>
+                  </div>
+                  {/* Line 2: what it does — why this model */}
+                  {(c.purpose || c.model_rationale) && (
+                    <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+                      {c.purpose}
+                      {c.purpose && c.model_rationale ? " — " : ""}
+                      {c.model_rationale}
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -519,12 +529,8 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
         )}
       </div>
 
-      {data.agent_architecture_summary && (
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground/80">Architecture:</span>{" "}
-          {data.agent_architecture_summary}
-        </p>
-      )}
+      {/* (The architecture summary is intentionally NOT repeated here — the Agent Architecture
+          section directly above already states it.) */}
 
       {/* Workloads */}
       <section className="space-y-3">
@@ -546,15 +552,7 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
         </div>
       </section>
 
-      <p className="text-[11px] text-muted-foreground">
-        APC = Agent Processing Credit. 1 APC = 1 token — every token a model reads (input) or
-        writes (output) counts, so the same token estimates drive both the platform cost and the
-        LLM cost.
-      </p>
-
-      {data.notes && (
-        <p className="text-[11px] text-muted-foreground italic">{data.notes}</p>
-      )}
+      <FinePrint notes={data.notes} />
     </div>
   );
 }

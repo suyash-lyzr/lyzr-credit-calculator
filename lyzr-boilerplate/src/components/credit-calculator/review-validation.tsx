@@ -11,6 +11,8 @@ interface ReviewValidationProps {
 }
 
 export function ReviewValidation({ data, isLoading }: ReviewValidationProps) {
+  // The reviewer's summary can be long; clamp it so the section reads as a verdict, not an essay.
+  const [expanded, setExpanded] = React.useState(false);
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -49,9 +51,17 @@ export function ReviewValidation({ data, isLoading }: ReviewValidationProps) {
           }`}>
             {isApproved ? "Calculations Approved" : "Revisions Needed"}
           </h4>
-          <p className="text-sm text-foreground/75 leading-relaxed">
+          <p className={`text-sm text-foreground/75 leading-relaxed ${expanded ? "" : "line-clamp-2"}`}>
             {data.summary}
           </p>
+          {data.summary.length > 140 && (
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="mt-1 text-xs font-medium text-primary hover:underline"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
         </div>
       </div>
 
