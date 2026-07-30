@@ -161,7 +161,9 @@ function WorkloadCard({
           </div>
           {(w.apc_profile_label || typeof w.apc_per_run === "number") && (
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {typeof w.apc_per_run === "number" ? `${formatNumber(w.apc_per_run)} APCs/run` : ""}
+              {typeof w.apc_per_run === "number"
+                ? `${formatNumber(w.apc_per_run)} APCs (tokens) per run`
+                : ""}
               {w.apc_profile_label ? ` · ${w.apc_profile_label}` : ""}
             </p>
           )}
@@ -253,8 +255,9 @@ function WorkloadCard({
             <IconChevronDown
               className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
             />
-            {calls.length} LLM call{calls.length > 1 ? "s" : ""} / run
-            {w.byo_model && " (BYO — paid to provider)"}
+            {calls.length} LLM call{calls.length > 1 ? "s" : ""} / run — the input + output tokens
+            below are what add up to this workload&apos;s APCs
+            {w.byo_model && " (BYO — LLM paid to provider)"}
           </button>
           {open && (
             <div className="overflow-x-auto border-t">
@@ -263,7 +266,7 @@ function WorkloadCard({
                   <tr className="bg-muted/40 text-left">
                     <th className="py-1.5 px-3 font-medium">Node</th>
                     <th className="py-1.5 px-3 font-medium">Model</th>
-                    <th className="py-1.5 px-3 font-medium text-right">In/Out tok</th>
+                    <th className="py-1.5 px-3 font-medium text-right">Input / Output tokens</th>
                     <th className="py-1.5 px-3 font-medium text-right">Cost/call</th>
                   </tr>
                 </thead>
@@ -391,8 +394,10 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
       {/* Intro + edit toggle */}
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm text-foreground/80">
-          <span className="font-semibold">Platform cost is metered in APCs (tokens)</span> — total
-          APCs × {isCloud ? "$20" : "$5"}/M ({isCloud ? "SaaS" : "VPC"}). LLM cost passes through at
+          <span className="font-semibold">Platform cost is metered in APCs.</span>{" "}
+          <span className="font-medium">1 APC = 1 token</span> — a small chunk of text (~4
+          characters) a model reads (input) or writes (output). Platform cost = total APCs ×{" "}
+          {isCloud ? "$20" : "$5"} per 1M ({isCloud ? "SaaS" : "VPC"}). LLM cost passes through at
           provider rates &mdash; no markup.
         </p>
         {canEdit && (
@@ -497,7 +502,7 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
             </p>
             <p className="text-2xl font-bold text-primary mt-0.5">{formatCurrency(platformTotal)}</p>
             <p className="text-[11px] text-foreground/60 mt-1">
-              {fmtApc(totalApc)} APCs/yr × ${apcRatePerM}/M
+              {fmtApc(totalApc)} APCs (tokens)/yr × ${apcRatePerM} per 1M
             </p>
           </div>
           <div className="rounded-lg border border-border bg-muted/30 p-3">
@@ -526,7 +531,8 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
           </p>
         </div>
 
-        {/* Recommended plan (or strategic flag) */}
+        {/* Strategic flag only — per sales feedback, no plan recommendation for a single use case
+            (customers may run several use cases; plans are sized at the account level). */}
         {rec && rec.strategic && (
           <div className="rounded-lg border border-amber-300/60 bg-amber-50/50 px-4 py-3">
             <p className="text-sm font-semibold text-amber-800">Strategic account — route to leadership</p>
@@ -537,24 +543,12 @@ export function CreditCalculation({ data, isLoading, onChange }: CreditCalculati
             </p>
           </div>
         )}
-        {rec && !rec.strategic && rec.tier && (
-          <div className="rounded-lg border border-primary/25 bg-primary/[0.04] px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-foreground">
-                Fits the {rec.tier.name} plan
-                <span className="ml-1.5 font-normal text-muted-foreground">
-                  ({isCloud ? "SaaS" : "VPC"})
-                </span>
-              </p>
-              <p className="text-sm font-bold text-primary">{formatCurrency(rec.tier.price)}/yr</p>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Uses ~{rec.capacity_used_pct < 0.1 ? "<0.1" : rec.capacity_used_pct}% of the plan&apos;s{" "}
-              {fmtApc(rec.tier.capacityApc)}-APC capacity ({fmtApc(totalApc)} APCs/yr).{" "}
-              Plans are bought at the account level — this use case fits comfortably inside one.
-            </p>
-          </div>
-        )}
+
+        <p className="text-[11px] text-muted-foreground">
+          APC = Agent Processing Credit. 1 APC = 1 token — every token a model reads (input) or
+          writes (output) counts, so the same token estimates drive both the platform cost and the
+          LLM cost.
+        </p>
       </section>
 
       {data.notes && (

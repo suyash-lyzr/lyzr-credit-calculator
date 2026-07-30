@@ -86,13 +86,13 @@ function profileKind(c: Complexity): "single" | "multi" {
   return c === "intermediate" || c === "complex" ? "multi" : "single";
 }
 
-/** A short label placing the run's APC/token usage against the P50/P95 reference band. */
+/** A short plain-language label placing the run's token usage against the reference profiles. */
 export function apcProfileLabel(c: Complexity, apcPerRun: number): string {
   const p = APC_PROFILES[profileKind(c)];
   const kind = profileKind(c) === "multi" ? "multi-agent" : "single-agent";
-  if (apcPerRun <= p.p50 * 1.34) return `${kind} · ~P50`;
-  if (apcPerRun <= p.p95 * 1.2) return `${kind} · ~P95`;
-  return `${kind} · above P95`;
+  if (apcPerRun <= p.p50 * 1.34) return `typical ${kind} size`;
+  if (apcPerRun <= p.p95 * 1.2) return `heavy ${kind} size`;
+  return `very heavy ${kind} size`;
 }
 
 export interface TierRecommendation {

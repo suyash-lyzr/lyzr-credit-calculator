@@ -531,7 +531,7 @@ export default function PricingExplainerPage() {
                   ["Multiply by annual runs", "Annual APCs = APCs/run × runs per year, for each workload, summed across the whole use case."],
                   ["Apply the deployment rate", `Platform cost = total annual APCs × $${vpcRate}/M (VPC) or $${saasRate}/M (SaaS).`],
                   ["Add LLM pass-through", "LLM cost = Σ(tokens × provider rate), or $0 on the Lyzr bill if the customer brings their own model."],
-                  ["Recommend a plan", "The engine picks the smallest standard plan whose capacity covers the annual APCs (or flags a strategic Unlimited-Credits case)."],
+                  ["Check the scale", "Plans are sized at the account level (a customer may run several use cases), so a single estimate isn't mapped to a plan — but usage beyond the largest standard tier is flagged as a strategic Unlimited-Credits case."],
                 ].map(([q, a], i) => (
                   <li key={q} className="flex gap-3 rounded-lg border bg-card px-3 py-2.5">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
@@ -545,9 +545,10 @@ export default function PricingExplainerPage() {
                 ))}
               </ol>
               <p className="mt-3 text-sm text-muted-foreground">
-                Because a single use case is usually far smaller than a plan&apos;s capacity, the
-                calculator shows the <strong className="text-foreground">usage cost</strong> (APCs ×
-                rate) as the headline and notes which plan it fits within.
+                Because a single use case is usually far smaller than a plan&apos;s capacity — and a
+                customer may run several use cases on one account — the calculator shows the{" "}
+                <strong className="text-foreground">usage cost</strong> (APCs × rate) as the
+                headline and leaves plan sizing to the account-level conversation.
               </p>
             </section>
 
