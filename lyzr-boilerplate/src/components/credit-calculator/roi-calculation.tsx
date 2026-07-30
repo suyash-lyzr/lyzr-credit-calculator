@@ -29,6 +29,17 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
     return new Intl.NumberFormat("en-US").format(value);
   };
 
+  // The model sometimes returns a plural unit_name ("tickets"), which reads wrong in per-unit
+  // phrasing ("12 min per tickets", "$5.72 / tickets"). Singularize defensively.
+  const singularize = (s: string) => {
+    const w = (s || "unit").trim();
+    if (/(ss|us|is)$/i.test(w)) return w; // process, analysis — already singular
+    if (/ies$/i.test(w)) return w.replace(/ies$/i, "y"); // queries -> query
+    if (/(ch|sh|x|z|s)es$/i.test(w)) return w.replace(/es$/i, ""); // batches -> batch
+    if (/s$/i.test(w)) return w.replace(/s$/i, ""); // tickets -> ticket
+    return w;
+  };
+
   // Show whole-dollar rates as "$29", fractional loaded rates as "$28.60" — never round a
   // loaded rate to a different integer than the unit-cost math implies.
   const formatRate = (value: number) =>
@@ -52,6 +63,7 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
     );
   }
 
+  const unit = singularize(data.unit_name);
   const yearlyVolume = data.volume_estimates.units_per_month * 12;
   const humanYearlyCost = data.human_analysis.cost_per_unit * yearlyVolume;
   // cost_per_unit is the ALL-IN AI tooling cost (Lyzr platform + LLM) per unit.
@@ -148,7 +160,7 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
             Human time saved
           </p>
           <p className="mt-0.5 text-xl font-bold">{data.comparison.time_savings_percentage}%</p>
-          <p className="text-[10px] text-muted-foreground">per {data.unit_name}</p>
+          <p className="text-[10px] text-muted-foreground">per {unit}</p>
         </div>
       </div>
 
@@ -156,11 +168,11 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
         Compared with a {data.human_analysis.mapped_role} at{" "}
         <span className="font-medium">{formatRate(data.human_analysis.fully_loaded_rate)}/hr</span>{" "}
         spending <span className="font-medium">{data.human_analysis.time_per_task_minutes} min</span>{" "}
-        per {data.unit_name}.
+        per {unit}.
         {hasResidualHuman &&
           (isEveryRunReview ? (
             <>
-              {" "}Every {data.unit_name} still gets a ~{reviewMinutesPerTouch}-min human sign-off —
+              {" "}Every {unit} still gets a ~{reviewMinutesPerTouch}-min human sign-off —
               that retained time is counted below, so savings aren&apos;t overstated.
             </>
           ) : (
@@ -183,7 +195,7 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
           </thead>
           <tbody className="divide-y">
             <tr>
-              <td className="py-2.5 px-4 font-medium">Time Per {data.unit_name}</td>
+              <td className="py-2.5 px-4 font-medium">Time Per {unit}</td>
               <td className="py-2.5 px-4">{data.human_analysis.time_per_task_minutes} Minutes</td>
               <td className="py-2.5 px-4">
                 {"< "}{Math.ceil(data.ai_analysis.time_per_task_seconds / 60)} min AI
@@ -202,9 +214,9 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
             </tr>
             <tr>
               <td className="py-2.5 px-4 font-medium">Unit Cost</td>
-              <td className="py-2.5 px-4">${data.human_analysis.cost_per_unit.toFixed(2)} / {data.unit_name}</td>
+              <td className="py-2.5 px-4">${data.human_analysis.cost_per_unit.toFixed(2)} / {unit}</td>
               <td className="py-2.5 px-4">
-                <span className="font-medium">${data.ai_analysis.cost_per_unit.toFixed(2)} / {data.unit_name}</span>{" "}
+                <span className="font-medium">${data.ai_analysis.cost_per_unit.toFixed(2)} / {unit}</span>{" "}
                 <span className="text-muted-foreground">(Lyzr runs + LLM)</span>
               </td>
             </tr>
@@ -216,7 +228,7 @@ export function ROICalculation({ data, isLoading }: ROICalculationProps) {
                   {formatExact(residualHumanYearlyCost)}{" "}
                   <span className="text-muted-foreground">
                     ({isEveryRunReview
-                      ? `${reviewMinutesPerTouch} min sign-off / ${data.unit_name}`
+                      ? `${reviewMinutesPerTouch} min sign-off / ${unit}`
                       : `${escalatedPct}% escalated`})
                   </span>
                 </td>
